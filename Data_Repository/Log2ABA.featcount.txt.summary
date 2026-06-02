@@ -1,0 +1,15 @@
+Status	1_ABI_GM_UMI_S54.Aligned.sortedByCoord.out.bam	1_ABI_LEU_UMI_S55.Aligned.sortedByCoord.out.bam	1_COL_GM_UMI_S52.Aligned.sortedByCoord.out.bam	1_COL_LEU_UMI_S53.Aligned.sortedByCoord.out.bam	1_LOG_GM_UMI_S56.Aligned.sortedByCoord.out.bam	1_LOG_LEU_UMI_S57.Aligned.sortedByCoord.out.bam	2_ABI_GM_UMI_S60.Aligned.sortedByCoord.out.bam	2_ABI_LEU_UMI_S61.Aligned.sortedByCoord.out.bam	2_COL_GM_UMI_S58.Aligned.sortedByCoord.out.bam	2_COL_LEU_UMI_S59.Aligned.sortedByCoord.out.bam	2_LOG_GM_UMI_S62.Aligned.sortedByCoord.out.bam	2_LOG_LEU_UMI_S63.Aligned.sortedByCoord.out.bam	3_ABI_GM_UMI_S66.Aligned.sortedByCoord.out.bam	3_ABI_LEU_UMI_S67.Aligned.sortedByCoord.out.bam	3_COL_GM_UMI_S64.Aligned.sortedByCoord.out.bam	3_COL_LEU_UMI_S65.Aligned.sortedByCoord.out.bam	3_LOG_GM_UMI_S68.Aligned.sortedByCoord.out.bam	3_LOG_LEU_UMI_S69.Aligned.sortedByCoord.out.bam
+Assigned	2224094	2543015	2285117	2828636	2568192	2835912	2292187	2437861	2475350	2701204	2170913	2676666	2362318	2851689	2471582	2555869	2313740	2406282
+Unassigned_Unmapped	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_Read_Type	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_Singleton	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_MappingQuality	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_Chimera	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_FragmentLength	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_Duplicate	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_MultiMapping	2466279	2136873	2578427	2494937	2531515	2349392	2580765	2722006	2479545	2444096	2390451	2408401	2318971	2175972	2689057	2341869	2340765	2023171
+Unassigned_Secondary	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_NonSplit	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_NoFeatures	497287	215932	536680	259068	458317	179467	441783	271934	536989	297207	341100	198053	380183	217484	518201	303073	368957	149708
+Unassigned_Overlapping_Length	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0	0
+Unassigned_Ambiguity	194807	199860	201943	221203	220641	204848	213330	198821	214122	224669	193488	202229	208523	229271	216490	211599	200652	182789
