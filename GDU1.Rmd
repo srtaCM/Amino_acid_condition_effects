@@ -13,11 +13,6 @@ output:
     df_print: paged
     number_sections: true
 ---
-```{r}
-git remote add origin https://github.com/srtaCM/Amino_acid_condition_effects.git
-git branch -M main
-git push -u origin main
-```
 
 ## 1. CLEAR ENVIRONMENT
 ```{r CLEAR-ENVIRONMENT}
