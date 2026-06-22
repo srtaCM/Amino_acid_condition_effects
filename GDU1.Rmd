@@ -16,7 +16,7 @@ output:
 
 ## 1. CLEAR ENVIRONMENT
 ```{r CLEAR-ENVIRONMENT}
-#------------------------ CLEAN ENVIRONMENT ------------------------# 
+#------------------------ CLEAN ENVIRONMENT ------------------------#
 rm(list = ls(all.names = TRUE)) # Remove all objects from the work space
 gc()  # Garbage collection to free up memory
 
@@ -28,6 +28,7 @@ options(
   digits = 3 # Number of digits when printing
   )
 #renv::init()
+
 #------------------------ PROJECT INFO ------------------------# 
 info <- list(
   Title = "ABI5-LOG2 ANALYSIS",
@@ -47,7 +48,7 @@ cat("Timestamp:", info$Timestamp, "\n\n")
 ## 2. Packages, Load, and Installation
 ```{r INSTALL-PACKAGES, message=FALSE}
 #could have added message=false
-#------------------------ LOAD REQ PACKAGES ------------------------# 
+#------------------------ LOAD REQ PACKAGES ------------------------# NEED TO FIX THIS, sometimes works, sometimes doesnt. But libraries are set to load when needed so just ignore this section
 required_packages <- c(
   "tidyverse", # dplyr, ggplot2, tidyr, purrr, stringr, readr, forcats
   "DESeq2", # Differential expression analysis
@@ -210,8 +211,8 @@ library(DESeq2)
 dds <- DESeqDataSetFromMatrix(
   countData = Pre_processed,
   colData = sample_info,
-  design = ~ Genotype * trt) #interaction model
-#This model answers: baseline differences (LOG2 vs COL, ABI5 vs COL)
+  design = ~ Genotype * trt) #interaction model\ This model answers: 
+#baseline differences (LOG2 vs COL, ABI5 vs COL)
 #leucine stress effect (LEU vs GM)
 #how mutants modify the leucine stress response (interaction terms)
 
@@ -222,15 +223,14 @@ dds <- dds[keep, ]
 #------------------------ RUN DESEQ2 ------------------------#
 dds <- DESeq(dds)
 
-#check
-dds$trt
-dds$Genotype
-resultsNames(dds)
+#------------------------ CHECK RUN ------------------------#
+
+#dds$trt
+#dds$Genotype
+#resultsNames(dds)
 
 ## Save full DESeq object
 #saveRDS(dds, file.path(procdata_dir, "dds_IM_H_UM.rds"))
-#sf <- round(sizeFactors(dds_COL), 3)
-#kable(data.frame(Sample=names(sf), SizeFactor=sf), caption="Size Factors")
 ```
 
 
@@ -312,6 +312,7 @@ p_dend
 #       p_dend, width = 12, height = 8, dpi = 300)
 ```
 
+
 ```{r}
 #------------------------ Correlation Distance ------------------------#
 # Correlation distance
@@ -338,19 +339,19 @@ dev.off()
 
 ```
 
-```{r}
-#------------------------ BASELINE DIFFERENCES ------------------------#
-res_LOG2_vs_COL <- results(dds, contrast = c("Genotype","log2-2","COL"),alpha = 0.05)
-res_ABI5_vs_COL <- results(dds, contrast = c("Genotype","abi5-7","COL"),alpha = 0.05)
+```{r BASELINE INTERACTIONS}
+#------------------------ BASELINE DIFFERENCES; VS COL ------------------------#
+res_LOG2_vs_COL <- results(dds, contrast = c("Genotype","log2-2","COL"), alpha = 0.05)
+res_ABI5_vs_COL <- results(dds, contrast = c("Genotype","abi5-7","COL"), alpha = 0.05)
 
 summary(res_LOG2_vs_COL)
 summary(res_ABI5_vs_COL)
 
-#The effect of III vs. II, under condition A.
-#This is the effect of “genotype_III_vs_I” minus “genotype_II_vs_I” ?
+#------------------------ THE EFFECT OF III vs. II, UNDER CONDTION A ------------------------#
+#This is the effect of “genotype_III_vs_I” minus “genotype_II_vs_I”
 #res = results(dds, contrast= c(0,-1,1,0,0,0))
 
-#Genotype differences under GM (baseline condition)
+#Genotype differences under GM (the baseline condition)
 
 #LOG2 vs ABI5 under GM:
 res_LOG2_vs_ABI5_GM <- results(dds,
@@ -365,13 +366,14 @@ res_LOG2_vs_ABI5_GM <- results(dds,
 ```
 
 
-```{r}
+```{r MAIN TRT EFFECT}
+#------------------------ MAIN TRT EFFECT; LEU vs GM (on COL) ------------------------#
 #The condition effect for genotype I (the main effect) Main treatment effect in the reference genotype (COL)
-
 #results(dds, contrast=c("condition","B","A"))
 
 res_LEU_in_COL <- results(dds, contrast = c("trt", "LEU", "GM"),alpha = 0.05)
 #This is the LEU vs GM effect in COL.
+
 summary(res_LEU_in_COL)
 ```
 
@@ -605,6 +607,7 @@ digraph LOG2_ABI1_ABI5_Leu {
 ")
 
 ```
+
 ```{r}
 library(DiagrammeR)
 
