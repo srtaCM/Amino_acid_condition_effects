@@ -27,11 +27,11 @@ options(
   dplyr.summarise.inform = FALSE, # Suppress dplyr's summaries
   digits = 3 # Number of digits when printing
   )
-#renv::init()
+#renv::init() #first time use to make an environment with the packages
 
 #------------------------ PROJECT INFO ------------------------# 
 info <- list(
-  Title = "ABI5-LOG2 ANALYSIS",
+  Title = "AMINO ACID (LOG2 ABI5) ANALYSIS",
   R_Version = R.version$version.string,
   Working_Directory = getwd(),
   Timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
@@ -45,11 +45,11 @@ cat("Timestamp:", info$Timestamp, "\n\n")
 ## Optional: show session info for reproducibility
 # sessionInfo()
 ```
+
 ## 2. Packages, Load, and Installation
 ```{r INSTALL-PACKAGES, message=FALSE}
-#could have added message=false
-#------------------------ LOAD REQ PACKAGES ------------------------# NEED TO FIX THIS, sometimes works, sometimes doesnt. But libraries are set to load when needed so just ignore this section
-required_packages <- c(
+#------------------------ LOAD REQ PACKAGES ------------------------#
+cran_packages <- c(
   "tidyverse", # dplyr, ggplot2, tidyr, purrr, stringr, readr, forcats
   "DESeq2", # Differential expression analysis
 #  "patchwork", # Combine multiple ggplot objects
@@ -61,10 +61,10 @@ required_packages <- c(
 #  "enrichplot", # Visualization of enrichment results
 #  "vidger", # RNA-seq viz helpers         
 #  "apeglm", # LFC shrinkage  
-#  "RColorBrewer", # Color palettes
+  "RColorBrewer", # Color palettes
 #  "reshape2", # Data reshaping
-#  "dendextend", # Dendrogram
-#  "writexl", # Excel export
+  "dendextend", # Dendrogram
+  "writexl", # Excel export
 #  "tibble"#, # Tibbles
   "ggdendro",
   "EnhancedVolcano",
@@ -73,23 +73,35 @@ required_packages <- c(
 #  "circlize",
 "DiagrammeR"
 )
-#------------------------ INSTALL MISSING PACKAGES ------------------------#
- new_packages <- required_packages[!(required_packages %in% installed.packages()[, "Package"])]
- if (length(new_packages)) {
-   install.packages(new_packages)
- }
 
-#if (!requireNamespace("BiocManager", quietly = TRUE))
-#    install.packages("BiocManager")
-#BiocManager::install("DiagrammeR")
+bioc_packages <- c(
+  # placeholder
+)
 
-#renv::install()
-#renv::snapshot()
+#------------------------ INSTALL CRAN PACKAGES ------------------------#
+new_cran <- cran_packages[!(cran_packages %in% installed.packages()[, "Package"])]
 
-#------------------------ WORKING DIRECTORY ------------------------#  
+if (length(new_cran) > 0) {
+  install.packages(new_cran)}
+
+#------------------------ INSTALL BIOCONDUCTOR ------------------------#
+if (!requireNamespace("BiocManager", quietly = TRUE)) {
+  install.packages("BiocManager")}
+
+new_bioc <- bioc_packages[!(bioc_packages %in% installed.packages()[, "Package"])]
+
+if (length(new_bioc) > 0) {
+  BiocManager::install(new_bioc, ask = FALSE)}
+
+#------------------------ LOAD PACKAGES ------------------------#
+invisible(lapply(cran_packages, library, character.only = TRUE))
+
+#------------------------ SET WORKING DIRECTORY ------------------------# 
 cat("Working directory:", getwd(), "\n")
+#renv::record(cran_packages)
 ```
-## 3. Folder PATHS
+
+## 3. Folder Setup
 ```{r FOLDERS message=FALSE}
 #------------------------  SET OUTPUT DIRECTORY ------------------------#  
 graphics_dir <- file.path("Results/Graphics")
@@ -98,7 +110,7 @@ procdata_dir <- file.path("Results/Processed_data")
 
 dirs <- c(graphics_dir, tables_dir, procdata_dir)
 
-# Create directories if they don't exist
+# Create the dirs if they don't exist
 invisible(
   sapply(
     dirs,
@@ -110,10 +122,11 @@ invisible(
 
 ## 4. Read In Raw Counts
 ```{r READ-COUNTS, message=FALSE}
-#------------------------ LOAD featureCounts WHOLE GENOME ALIGNMENT ------------------------#  
-library(tidyverse)
-featcount <- read_tsv("./Data_Repository/Log2ABA.featcount.txt", skip = 1)
-count_cols <- colnames(featcount)[7:ncol(featcount)] #backup of OG names
+#------------------------ LOAD WHOLE GENOME ALIGNMENT ------------------------# 
+#library(tidyverse)
+featcount <- read_tsv("./Data_Repository/Log2ABA.featcount.txt", skip = 1) #featcounts
+count_cols <- colnames(featcount)[7:ncol(featcount)] #backup of OG names except first 7 col
+
 read.count <- featcount %>%
   dplyr::select(all_of(count_cols)) %>%
   as.matrix()
@@ -122,11 +135,8 @@ rownames(read.count) <- featcount[[1]] #Add GENES / names
 ## Checks
 stopifnot(!anyDuplicated(rownames(read.count)))
 stopifnot(is.numeric(read.count[1, ]))
-```
 
-## 5. Raw Counts Data Prep
-```{r}
-#------------------------ CLEAN RAW COUNTS ------------------------#
+#------------------------ read counts ------------------------#
 # Current column names from featureCounts
 old_names <- colnames(read.count)
 
@@ -148,32 +158,17 @@ info <- info %>%
 
 info <- info %>%
   mutate(new = paste0(genotype_clean, "_", treatment, "_", rep))
+
 colnames(read.count) <- info$new
-
-#------------------------ SAVE ------------------------#
-## Convert matrix → data frame with gene IDs
-raw_counts_df <- as.data.frame(read.count)
-raw_counts_df <- tibble::rownames_to_column(raw_counts_df, "GeneID")
-
-library(writexl)
-# Export both CSV and Excel
-#write_csv(raw_counts_df, file.path(tables_dir, "raw_counts_clean.csv"))
-#writexl::write_xlsx(raw_counts_df, file.path(tables_dir, "LOG2_ABI_raw_counts_clean.xlsx"))
 ```
 
-## 6. PRE-PROCESSING PREP (for DESeq2)
-```{r PRE-PROCESSING message = FALSE}
-#------------------------ PRELIMINARY INFO ------------------------#
-Pre_processed <- read.count
-colnames(Pre_processed)  # Confirmation of order
-cat("Counts loaded:", nrow(Pre_processed), "genes x", ncol(Pre_processed), "samples\n")
 
+## 5. Raw Counts Data Prep
+```{r}
 #------------------------ Set: NAMES, GROUPS, TRT INFO ------------------------#
-# Extract sample names
-sample_names <- colnames(Pre_processed)
-# Extract group (ABI, COL, LOG)
+sample_names <- colnames(read.count)
+
 group_setup <- stringr::str_extract(sample_names, "^(abi5-7|COL|log2-2)")
-# Map to group labels
 genotype <- factor(group_setup, levels = c("COL","log2-2","abi5-7"))
 
 # Extract condition, trt? (GM LEU)
@@ -182,21 +177,31 @@ trt <- stringr::str_extract(sample_names, "GM|LEU")
 # sample_info
 sample_info <- data.frame(
   row.names = sample_names,
-  Genotype = genotype,
-  trt = factor(trt,  levels = c("GM", "LEU"))
-)
+  genotype = genotype,
+  treatment = factor(trt,  levels = c("GM", "LEU")))
 
-stopifnot(all(rownames(sample_info) == colnames(Pre_processed))) #check
-#Pre_processed <- tibble::rownames_to_column(as.data.frame(as.matrix(Pre_processed)), "GeneID")
+
+stopifnot(all(rownames(sample_info) == colnames(read.count))) #check
+#read.count <- tibble::rownames_to_column(as.data.frame(as.matrix(read.count)), "GeneID")
+
+#------------------------ SAVE ------------------------#
+## Convert matrix → data frame with gene IDs
+raw_counts_df <- as.data.frame(read.count)
+raw_counts_df <- tibble::rownames_to_column(raw_counts_df, "GeneID")
+
+#library(writexl)
+# Export both CSV and Excel
+#write_csv(raw_counts_df, file.path(tables_dir, "raw_counts_clean.csv"))
+#writexl::write_xlsx(raw_counts_df, file.path(tables_dir, "LOG2_ABI_raw_counts_clean.xlsx"))
 ```
 
-
-```{r VALUES}
+## 5. THRESHOLDS, COLORS
+```{r THRESHOLDS}
 #------------------------ Set Values: P.VAL, LFC ------------------------#
 pad <- 0.05
 lfc_thresh <- 1.0
 
-#------------------------ Set COLORS ------------------------#
+#------------------------ COLORS ------------------------#
 colors <- c(
   "COL" = "#1f78b4",   # blue
   "abi5-7" = "#e31a1c",   # red
@@ -204,14 +209,14 @@ colors <- c(
 )
 ```
 
-
+## 6. DESEQ2
 ```{r DESeq-run, message=FALSE}
 #------------------------ DESEQ2 MATRIX ------------------------#
-library(DESeq2)
+#library(DESeq2)
 dds <- DESeqDataSetFromMatrix(
-  countData = Pre_processed,
+  countData = read.count,
   colData = sample_info,
-  design = ~ Genotype * trt) #interaction model\ This model answers: 
+  design = ~ genotype * treatment) #interaction model\ This model answers: 
 #baseline differences (LOG2 vs COL, ABI5 vs COL)
 #leucine stress effect (LEU vs GM)
 #how mutants modify the leucine stress response (interaction terms)
@@ -223,34 +228,33 @@ dds <- dds[keep, ]
 #------------------------ RUN DESEQ2 ------------------------#
 dds <- DESeq(dds)
 
-#------------------------ CHECK RUN ------------------------#
-
-#dds$trt
-#dds$Genotype
+#------------------------ CHECK ------------------------#
+#dds$treatment #check levels
+#dds$genotype
 #resultsNames(dds)
 
 ## Save full DESeq object
 #saveRDS(dds, file.path(procdata_dir, "dds_IM_H_UM.rds"))
 ```
 
-
+## 7. VST; NORM COUNTS
 ```{r VST PCA}
 #------------------------ VST ------------------------#
 ## Variance stabilizing transformation
-library(ggrepel)
+#library(ggrepel)
 
 vsd <- vst(dds, blind = FALSE) # blind ignores design
 colnames(vsd) <- rownames(sample_info) ## Sample names, match to colData
 stopifnot(all(colnames(vsd) == rownames(colData(dds))))  # Check
 
 #------------------------ PCA; PLOT ------------------------#
-pca_data <- plotPCA(vsd, intgroup = c("Genotype","trt"), returnData = TRUE)
+pca_data <- plotPCA(vsd, intgroup = c("genotype","treatment"), returnData = TRUE)
 percentVar <- round(100 * attr(pca_data, "percentVar"))
 
 p_pca <- ggplot(pca_data, 
-                aes(PC1, PC2, color = Genotype, shape = trt)) +
+                aes(PC1, PC2, color = genotype, shape = treatment)) +
   geom_point(size = 4.5, stroke = 1.5, alpha = 0.85) +
-  scale_color_manual(values = colors, name = "Genotype") +
+  scale_color_manual(values = colors, name = "genotype") +
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
   ylab(paste0("PC2: ", percentVar[2], "% variance")) +
   geom_text_repel(aes(label = name),                 
@@ -281,7 +285,7 @@ print(p_pca)
 
 ```{r}
 #------------------------ DISTANCE ------------------------#
-library(pheatmap)
+#library(pheatmap)
 sample_dist <- dist(t(assay(vsd)))  # t samples as rows
 hc <- hclust(sample_dist, method = "ward.D2")
 dend_data <- ggdendro::dendro_data(hc)
@@ -312,7 +316,6 @@ p_dend
 #       p_dend, width = 12, height = 8, dpi = 300)
 ```
 
-
 ```{r}
 #------------------------ Correlation Distance ------------------------#
 # Correlation distance
@@ -322,11 +325,11 @@ sampleDistMatrix <- as.matrix(sampleDist_cor)
 #png(file.path(graphics_dir, "distance_heatmap.png"),
 #    width = 3000, height = 3000, res = 300)
 
-pheatmap(
+s2s<-pheatmap(
   sampleDistMatrix,
   clustering_distance_rows = sampleDist_cor,
   clustering_distance_cols = sampleDist_cor,
-  annotation_col = as.data.frame(colData(dds)[, c("Genotype","trt")]),
+  annotation_col = as.data.frame(colData(dds)[, c("genotype","treatment")]),
   main = "Sample-to-sample distance (1 - correlation)",
   treeheight_row = 75,
   treeheight_col = 60,
@@ -335,14 +338,15 @@ pheatmap(
   fontsize = 9
 )
 
-dev.off()
-
+#dev.off()
+s2s
 ```
 
+## BASELINE INTERACTIONS
 ```{r BASELINE INTERACTIONS}
-#------------------------ BASELINE DIFFERENCES; VS COL ------------------------#
-res_LOG2_vs_COL <- results(dds, contrast = c("Genotype","log2-2","COL"), alpha = 0.05)
-res_ABI5_vs_COL <- results(dds, contrast = c("Genotype","abi5-7","COL"), alpha = 0.05)
+#------------------------ BASELINE DIFFERENCES; GENOTYPE VS COL ------------------------#
+res_LOG2_vs_COL <- results(dds, contrast = c("genotype","log2-2","COL"), alpha = 0.05)
+res_ABI5_vs_COL <- results(dds, contrast = c("genotype","abi5-7","COL"), alpha = 0.05)
 
 summary(res_LOG2_vs_COL)
 summary(res_ABI5_vs_COL)
@@ -354,9 +358,8 @@ summary(res_ABI5_vs_COL)
 #Genotype differences under GM (the baseline condition)
 
 #LOG2 vs ABI5 under GM:
-res_LOG2_vs_ABI5_GM <- results(dds,
-    contrast = c(0, -1, 1, 0, 0, 0)
-)
+res_LOG2_vs_ABI5_GM <- results(dds, contrast = c(0, -1, 1, 0, 0, 0), alpha = 0.05)
+summary(res_LOG2_vs_ABI5_GM)
 
 #This subtracts:
 #LOG2 vs COL
@@ -365,13 +368,13 @@ res_LOG2_vs_ABI5_GM <- results(dds,
 # giving LOG2 vs ABI5 under GM
 ```
 
-
+## MAIN TRT EFFECT
 ```{r MAIN TRT EFFECT}
 #------------------------ MAIN TRT EFFECT; LEU vs GM (on COL) ------------------------#
 #The condition effect for genotype I (the main effect) Main treatment effect in the reference genotype (COL)
 #results(dds, contrast=c("condition","B","A"))
 
-res_LEU_in_COL <- results(dds, contrast = c("trt", "LEU", "GM"),alpha = 0.05)
+res_LEU_in_COL <- results(dds, contrast = c("treatment", "LEU", "GM"), alpha = 0.05)
 #This is the LEU vs GM effect in COL.
 
 summary(res_LEU_in_COL)
@@ -385,7 +388,7 @@ summary(res_LEU_in_COL)
 #results(dds, contrast=list(c("condition_B_vs_A","genotypeIII.conditionB")))
 #my version:
 res_LEU_in_LOG2 <- results(dds,
-    contrast = list(c("trt_LEU_vs_GM", "Genotypelog2.2.trtLEU")
+    contrast = list(c("treatment_LEU_vs_GM", "genotypelog2.2.treatmentLEU")
     ), alpha = 0.05
 )
 #The condition effect for genotype II.
@@ -394,9 +397,10 @@ res_LEU_in_LOG2 <- results(dds,
 #Treatment effect in ABI5 (main effect + interaction)
 
 res_LEU_in_ABI5 <- results(dds,
-    contrast = list(c("trt_LEU_vs_GM", "Genotypeabi5.7.trtLEU")
+    contrast = list(c("treatment_LEU_vs_GM", "genotypeabi5.7.treatmentLEU")
     ), alpha = 0.05
 )
+
 #This gives the LEU response in ABI5.
 summary(res_LEU_in_LOG2)
 #This gives the LEU response in LOG2.
@@ -412,9 +416,9 @@ summary(res_LEU_in_ABI5)
 
 #Interaction: does LEU response differ between LOG2 and COL?
 
-res_LOG2_interaction <- results(dds, name = "Genotypelog2.2.trtLEU")
+res_LOG2_interaction <- results(dds, name = "genotypelog2.2.treatmentLEU")
 #This tests:Does LOG2 respond differently to LEU than COL does?
-res_ABI5_interaction <- results(dds, name = "Genotypeabi5.7.trtLEU")
+res_ABI5_interaction <- results(dds, name = "genotypeabi5.7.treatmentLEU")
 #Interpretation: Positive/negative log2FC here = difference in leucine response in mutant vs COL.These genes would be “stress‑response rewired” by LOG2 or ABI5.
 #These are the genes where: LOG2 or ABI5 mutants respond to leucine differently than COL.
 
@@ -430,7 +434,7 @@ summary(res_ABI5_interaction)
 #Interaction: LOG2 vs ABI5 difference in LEU response
 
 res_LOG2_vs_ABI5_interaction <- results(dds,
-    contrast = list("Genotypelog2.2.trtLEU", "Genotypeabi5.7.trtLEU")
+    contrast = list("genotypelog2.2.treatmentLEU", "genotypeabi5.7.treatmentLEU")
 )
 
 #This answers:Does LOG2 modify the LEU response differently than ABI5 does?
@@ -465,37 +469,43 @@ plot_ma_and_volcano(res_ABI5_interaction, "Interaction: ABI5 vs COL (LEU respons
 
 
 ```{r}
-library(pheatmap)
+#library(pheatmap)
 plot_heatmap <- function(res, title, n = 100){
   topgenes <- head(order(res$padj), n)
   mat <- assay(vsd)[topgenes, ]
   mat_z <- t(scale(t(mat)))   # Z-score per gene
   
+
+  #------------------------ heatmap ------------------------#
   pheatmap(
     mat_z,
     show_rownames = FALSE,
     scale = "row",
         cluster_rows = TRUE,
     cluster_cols = TRUE,
-    annotation_col = as.data.frame(colData(dds)[, c("Genotype","trt")]),
-    main = title
+    main = title,
+    angle_col = 45,
+    annotation_col = as.data.frame(sample_info),
+      color = colorRampPalette(c("#3B4CC0", "white", "#B40426"))(100),
+    fontsize_col = 10,
+    border_color = NA
   )
 }
+
 
 #Baseline differences (GM)
 plot_heatmap(res_LOG2_vs_COL, 
              "Baseline: log2-2 vs COL (GM)")
-
 plot_heatmap(res_ABI5_vs_COL, 
              "Baseline: abi5-7 vs COL (GM)")
-
 plot_heatmap(res_LOG2_vs_ABI5_GM, 
              "Baseline: log2-2 vs abi5-7 (GM)")
-
 #specifically a leucine response (COL)
-p1 <- plot_heatmap(res_LEU_in_COL, 
+plot_heatmap(res_LEU_in_COL, 
              "LEU vs GM in COL")
-#ggsave(file.path(graphics_dir, "LEU_GM_inCOLHMAP.png"),p1, width = 12, height = 8, dpi = 300)
+
+ggsave(file.path(graphics_dir, "LEUvGM_BaseHMAP.png"), p4, width = 12, height = 8, dpi = 300)
+
 
 #Full LEU response within each genotype
 plot_heatmap(res_LEU_in_LOG2, 
