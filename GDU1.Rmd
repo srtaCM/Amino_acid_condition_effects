@@ -65,13 +65,13 @@ cran_packages <- c(
 #  "reshape2", # Data reshaping
   "dendextend", # Dendrogram
   "writexl", # Excel export
-#  "tibble"#, # Tibbles
   "ggdendro",
   "EnhancedVolcano",
-#  "knitr",
 #  "ComplexHeatmap",
 #  "circlize",
-"DiagrammeR"
+"DiagrammeR",
+"gridExtra",
+"grid"
 )
 
 bioc_packages <- c(
@@ -161,7 +161,6 @@ info <- info %>%
 
 colnames(read.count) <- info$new
 ```
-
 
 ## 5. Raw Counts Data Prep
 ```{r}
@@ -471,42 +470,82 @@ plot_ma_and_volcano(res_ABI5_interaction, "Interaction: ABI5 vs COL (LEU respons
 ```{r}
 #library(pheatmap)
 plot_heatmap <- function(res, title, n = 100){
+
   topgenes <- head(order(res$padj), n)
   mat <- assay(vsd)[topgenes, ]
   mat_z <- t(scale(t(mat)))   # Z-score per gene
   
-
+  # consistent annotation
+  ann <- as.data.frame(sample_info)
+  rownames(ann) <- colnames(mat_z)
+  
   #------------------------ heatmap ------------------------#
-  pheatmap(
+HMap<-  pheatmap(
     mat_z,
     show_rownames = FALSE,
     scale = "row",
-        cluster_rows = TRUE,
+    cluster_rows = TRUE,
     cluster_cols = TRUE,
     main = title,
     angle_col = 45,
-    annotation_col = as.data.frame(sample_info),
-      color = colorRampPalette(c("#3B4CC0", "white", "#B40426"))(100),
+    annotation_col = ann,
+    color = colorRampPalette(c("#3B4CC0", "white", "#B40426"))(100),
     fontsize_col = 10,
-    border_color = NA
+    border_color = NA,
+    silent = TRUE,   # <-- IMPORTANT
+    cellwidth = NA,
+cellheight = NA,
+annotation_names_col = FALSE
+
+
   )
+  
+  return(HMap$gtable)
+}
+```
+
+
+```{r}
+#Baseline differences (GM)
+hmA <- plot_heatmap(res_LOG2_vs_COL, "Baseline: log2-2 vs COL (GM)")
+hmB <- plot_heatmap(res_ABI5_vs_COL, "Baseline: abi5-7 vs COL (GM)")
+hmC <- plot_heatmap(res_LOG2_vs_ABI5_GM, "Baseline: log2-2 vs abi5-7 (GM)")
+hmD <- plot_heatmap(res_LEU_in_COL, "LEU vs GM in COL")
+
+
+library(gridExtra)
+label_panel <- function(grob, label){
+  arrangeGrob(grob, top = textGrob(label, x = 0, hjust = 0,
+                                   gp = gpar(fontsize = 14, fontface = "bold")))
 }
 
-
-#Baseline differences (GM)
-plot_heatmap(res_LOG2_vs_COL, 
-             "Baseline: log2-2 vs COL (GM)")
-plot_heatmap(res_ABI5_vs_COL, 
-             "Baseline: abi5-7 vs COL (GM)")
-plot_heatmap(res_LOG2_vs_ABI5_GM, 
-             "Baseline: log2-2 vs abi5-7 (GM)")
-#specifically a leucine response (COL)
-plot_heatmap(res_LEU_in_COL, 
-             "LEU vs GM in COL")
-
-ggsave(file.path(graphics_dir, "LEUvGM_BaseHMAP.png"), p4, width = 12, height = 8, dpi = 300)
+hmA_l <- label_panel(hmA, "B")
+hmB_l <- label_panel(hmB, "C")
+hmC_l <- label_panel(hmC, "D")
+hmD_l <- label_panel(hmD, "A")
 
 
+library(gridExtra)
+library(grid)
+pdf(file.path(graphics_dir, "BASELINE_heatmaps.pdf"), width = 16, height = 12)
+
+grid.arrange(
+  arrangeGrob(hmD_l,hmA_l, hmB_l, hmC_l, ncol = 2),
+  ncol = 2,
+  widths = c(4, 0.6),
+  top = textGrob("Transcriptional Differences Across Genotypes and Treatments",
+                 gp = gpar(fontsize = 16, fontface = "bold"))
+)
+
+dev.off()
+
+
+
+#ggsave(file.path(graphics_dir, "LEUvGM_BaseHMAP.png"), p4, width = 12, height = 8, dpi = 300)
+```
+
+
+```{r}
 #Full LEU response within each genotype
 plot_heatmap(res_LEU_in_LOG2, 
              "Full LEU Response in log2-2")
@@ -518,16 +557,19 @@ plot_heatmap(res_LOG2_interaction,
 plot_heatmap(res_ABI5_interaction, 
              "Interaction: ABI5 modifies LEU response")
 
-#Full LEU response within each genotype
-plot_heatmap(res_LEU_in_LOG2, 
-             "Full LEU Response in LOG2")
+#ggsave(file.path(graphics_dir, "abi_leu_interaction_HMAP.png"), p3, width = 12, height = 8, dpi = 300) 
 
-plot_heatmap(res_LEU_in_ABI5, 
+
+#Full LEU response within each genotype
+
+p2<-plot_heatmap(res_LEU_in_ABI5, 
              "Full LEU Response in ABI5")
 
 #Compare mutant responses
-plot_heatmap(res_LOG2_vs_ABI5_interaction, 
+p3<-plot_heatmap(res_LOG2_vs_ABI5_interaction, 
              "Interaction: LOG2 vs ABI5 LEU Response")
+
+ggsave(file.path(graphics_dir, "interaction_response_abi_log_HMAP.png"), p3, width = 12, height = 8, dpi = 300) 
 
 ```
 
