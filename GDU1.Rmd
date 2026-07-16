@@ -1,109 +1,124 @@
 ---
-title: "RNA-seq analysis: COL, LOG2, ABI5 × GM, LEU"
-author: "Iliana Castillo-Machuca | Virginia Tech SPES"
-date: "`r Sys.Date()`"
+title: "RNA-seq Analysis of COL, log2-2, and abi5-7 Under GM and LEU Conditions"
+subtitle: "Differential Expression, Clustering, and Stress-Response Profiling"
+author: "Iliana Castillo-Machuca — Virginia Tech, School of Plant & Environmental Sciences"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
 output: 
   html_document:
     toc: true
     toc_float: true
     toc_depth: 3
+    number_sections: true
     code_folding: hide
-    theme: flatly
+    theme: cosmo
     highlight: tango
     df_print: paged
-    number_sections: true
+    fig_width: 8
+    fig_height: 5
+    includes:
+      after_body: style.html
 ---
 
-## 1. CLEAR ENVIRONMENT
+# 1. CLEAR ENVIRONMENT
 ```{r CLEAR-ENVIRONMENT}
-#------------------------ CLEAN ENVIRONMENT ------------------------#
-rm(list = ls(all.names = TRUE)) # Remove all objects from the work space
-gc()  # Garbage collection to free up memory
+#------------------------ 1.1 CLEAN ENVIRONMENT ------------------------#
+rm(list = ls(envir = .GlobalEnv, all.names = TRUE)) # Clear wrkspace objects
+invisible(gc())  # Garbage collection to free memory
 
+# Global options for consistent behavior
 options(
-  max.print = 1e5,  #Reasonable cap to avoid massive console dumps
-  scipen = 0, # Use scientific notation
-  stringsAsFactors = FALSE, # Keep strings as character by default
-  dplyr.summarise.inform = FALSE, # Suppress dplyr's summaries
-  digits = 3 # Number of digits when printing
+  max.print              = 50000, # Cap console output
+  scipen                 = 999,   # Avoid scientific notation, 0 if yes
+  stringsAsFactors       = FALSE, # Keep strings as character
+  dplyr.summarise.inform = FALSE, # Suppress dplyr's messages
+  digits                 = 4 # Number of digits to print
   )
-#renv::init() #first time use to make an environment with the packages
 
-#------------------------ PROJECT INFO ------------------------# 
+set.seed(1234)
+#------------------------ 1.2 PROJECT INFO ------------------------# 
 info <- list(
-  Title = "AMINO ACID (LOG2 ABI5) ANALYSIS",
-  R_Version = R.version$version.string,
+  Title             = "AMINO ACID TOXICITY (LOG2 ABI5) ANALYSIS",
+  R_Version         = R.version$version.string,
   Working_Directory = getwd(),
-  Timestamp = format(Sys.time(), "%Y-%m-%d %H:%M:%S"))
+  Timestamp         = format(Sys.time(), "%Y-%m-%d %H:%M:%S")
+  )
 
-separator <- strrep("=", 80)
-cat("\n", separator, "\n", info$Title, "\n", separator, "\n")
+separator <- paste0("\n", strrep("=", 80), "\n")
+
+cat(separator)
+cat("PROJECT:", info$Title, "\n")
+cat(separator)
+
 cat("R Version:", info$R_Version, "\n")
 cat("Working Directory:", info$Working_Directory, "\n")
-cat("Timestamp:", info$Timestamp, "\n\n")
+cat("Timestamp:", info$Timestamp, "\n")
+cat(separator)
 
-## Optional: show session info for reproducibility
-# sessionInfo()
+info$renv_active <- renv::project()
+cat("renv Project:", info$renv_active, "\n")
+
+info$Git_Commit <- system("git rev-parse --short HEAD", intern = TRUE)
+cat("Git Commit:", info$Git_Commit, "\n")
+
+if (interactive()) {
+  message("Run sessionInfo() for reproducibility.")
+}
+
+#renv::init() #first time use to make an environment with the packages
 ```
 
-## 2. Packages, Load, and Installation
+# 2. Packages, Load, and Installation
 ```{r INSTALL-PACKAGES, message=FALSE}
-#------------------------ LOAD REQ PACKAGES ------------------------#
+#------------------------ 2.1 LOAD PACKAGES ------------------------#
 cran_packages <- c(
   "tidyverse", # dplyr, ggplot2, tidyr, purrr, stringr, readr, forcats
-  "DESeq2", # Differential expression analysis
-#  "patchwork", # Combine multiple ggplot objects
   "ggrepel", # Add non-overlapping text labels to ggplot2
   "pheatmap", # Clustered heat maps
-#  "AnnotationDbi", # Gene annotation framework
-#  "org.At.tair.db", # Arabidopsis thaliana annotations
-#  "clusterProfiler", # GO/KEGG enrichment analysis and GSEA
-#  "enrichplot", # Visualization of enrichment results
-#  "vidger", # RNA-seq viz helpers         
-#  "apeglm", # LFC shrinkage  
   "RColorBrewer", # Color palettes
-#  "reshape2", # Data reshaping
   "dendextend", # Dendrogram
   "writexl", # Excel export
   "ggdendro",
-  "EnhancedVolcano",
-#  "ComplexHeatmap",
-#  "circlize",
-"DiagrammeR",
-"gridExtra",
-"grid"
+  "DiagrammeR",
+  "gridExtra",
+  "grid",
+  "rmarkdown",
+  "yaml",
+  "BiocManager"
 )
 
 bioc_packages <- c(
-  # placeholder
+  "DESeq2", # Differential expression analysis
+  "EnhancedVolcano",
+  "rstudioapi"
+ #  "org.At.tair.db", # Arabidopsis thaliana annotations
+#  "clusterProfiler", # GO/KEGG enrichment analysis and GSEA
 )
 
 #------------------------ INSTALL CRAN PACKAGES ------------------------#
-new_cran <- cran_packages[!(cran_packages %in% installed.packages()[, "Package"])]
-
-if (length(new_cran) > 0) {
-  install.packages(new_cran)}
+new_cran <- cran_packages[!sapply(cran_packages, requireNamespace, quietly = TRUE)]
+if (length(new_cran) > 0) install.packages(new_cran)
 
 #------------------------ INSTALL BIOCONDUCTOR ------------------------#
 if (!requireNamespace("BiocManager", quietly = TRUE)) {
-  install.packages("BiocManager")}
+  install.packages("BiocManager")
+}
 
-new_bioc <- bioc_packages[!(bioc_packages %in% installed.packages()[, "Package"])]
-
-if (length(new_bioc) > 0) {
-  BiocManager::install(new_bioc, ask = FALSE)}
+new_bioc <- bioc_packages[!sapply(bioc_packages, requireNamespace, quietly = TRUE)]
+if (length(new_bioc) > 0) BiocManager::install(new_bioc, ask = FALSE)
 
 #------------------------ LOAD PACKAGES ------------------------#
 invisible(lapply(cran_packages, library, character.only = TRUE))
+invisible(lapply(bioc_packages, library, character.only = TRUE))
 
 #------------------------ SET WORKING DIRECTORY ------------------------# 
 cat("Working directory:", getwd(), "\n")
-#renv::record(cran_packages)
+#renv::status()
+#renv::snapshot() #not installed cluster and org.at yet
 ```
 
-## 3. Folder Setup
+# 3. Folder Setup
 ```{r FOLDERS message=FALSE}
-#------------------------  SET OUTPUT DIRECTORY ------------------------#  
+#------------------------ 3.1 SET OUTPUT DIRECTORY ------------------------#  
 graphics_dir <- file.path("Results/Graphics")
 tables_dir   <- file.path("Results/Tables") 
 procdata_dir <- file.path("Results/Processed_data")
@@ -120,73 +135,68 @@ invisible(
       } } ) )
 ```
 
-## 4. Read In Raw Counts
+# 4. Read In Raw Counts
 ```{r READ-COUNTS, message=FALSE}
-#------------------------ LOAD WHOLE GENOME ALIGNMENT ------------------------# 
-#library(tidyverse)
-featcount <- read_tsv("./Data_Repository/Log2ABA.featcount.txt", skip = 1) #featcounts
-count_cols <- colnames(featcount)[7:ncol(featcount)] #backup of OG names except first 7 col
+#------------------------ 4.1 LOAD GENOME ALIGNMENT FILES ------------------------# 
+featcount <- read_tsv("./Data_Repository/Log2ABA.featcount.txt", skip = 1)
+count_cols <- colnames(featcount)[7:ncol(featcount)] # backup OG names except first 7 col
 
 read.count <- featcount %>%
   dplyr::select(all_of(count_cols)) %>%
   as.matrix()
+
 rownames(read.count) <- featcount[[1]] #Add GENES / names
 
-## Checks
-stopifnot(!anyDuplicated(rownames(read.count)))
-stopifnot(is.numeric(read.count[1, ]))
-
-#------------------------ read counts ------------------------#
-# Current column names from featureCounts
-old_names <- colnames(read.count)
-
-extract_info <- function(x) {
-  rep <- sub("^([0-9]+)_.*", "\\1", x)
-  genotype <- sub("^[0-9]+_([^_]+)_.*", "\\1", x)
-  treatment <- sub("^[0-9]+_[^_]+_([^_]+)_.*", "\\1", x)
-  tibble(old_names = x, genotype, treatment, rep)
-}
-info <- bind_rows(lapply(old_names, extract_info))
-
-info <- info %>%
-  mutate(genotype_clean = case_when(
-    genotype == "ABI"  ~ "abi5-7",
-    genotype == "LOG" ~ "log2-2",
-    genotype == "COL"  ~ "COL",
-    TRUE ~ genotype)
-    )
-
-info <- info %>%
-  mutate(new = paste0(genotype_clean, "_", treatment, "_", rep))
+#------------------------ 4.2 SET NAMES & INFO ------------------------#
+info <- tibble(old = count_cols) |>
+  tidyr::separate_wider_delim(
+    old,
+    delim = "_",
+    names = c("rep", "genotype", "treatment", "rest"),
+    too_many = "drop"
+  ) |>
+  mutate(
+    genotype_clean = case_when(
+      genotype == "ABI" ~ "abi5-7",
+      genotype == "LOG" ~ "log2-2",
+      genotype == "COL" ~ "COL",
+      TRUE ~ genotype
+    ),
+    new = paste(genotype_clean, treatment, rep, sep = "_")
+  )
 
 colnames(read.count) <- info$new
 ```
 
-## 5. Raw Counts Data Prep
+# 5. Data Prep
 ```{r}
-#------------------------ Set: NAMES, GROUPS, TRT INFO ------------------------#
+#------------------------ 5.1 DESIGN SET UP ------------------------#
 sample_names <- colnames(read.count)
 
+# Extract genotype (COL, log2-2, abi5-7)
 group_setup <- stringr::str_extract(sample_names, "^(abi5-7|COL|log2-2)")
 genotype <- factor(group_setup, levels = c("COL","log2-2","abi5-7"))
 
-# Extract condition, trt? (GM LEU)
-trt <- stringr::str_extract(sample_names, "GM|LEU")
+# Extract treatment (GM or LEU)
+treatment <- stringr::str_extract(sample_names, "(GM|LEU)")
+treatment <- factor(treatment, levels = c("GM", "LEU"))
 
-# sample_info
+# Build sample info
 sample_info <- data.frame(
   row.names = sample_names,
   genotype = genotype,
-  treatment = factor(trt,  levels = c("GM", "LEU")))
+  treatment = treatment,
+  replicate = stringr::str_extract(sample_names, "[0-9]+")
+)
 
-
-stopifnot(all(rownames(sample_info) == colnames(read.count))) #check
-#read.count <- tibble::rownames_to_column(as.data.frame(as.matrix(read.count)), "GeneID")
+# Safety check
+stopifnot(all(rownames(sample_info) == colnames(read.count)))
 
 #------------------------ SAVE ------------------------#
+#read.count <- tibble::rownames_to_column(as.data.frame(as.matrix(read.count)), "GeneID")
 ## Convert matrix → data frame with gene IDs
-raw_counts_df <- as.data.frame(read.count)
-raw_counts_df <- tibble::rownames_to_column(raw_counts_df, "GeneID")
+#raw_counts_df <- as.data.frame(read.count)
+#raw_counts_df <- tibble::rownames_to_column(raw_counts_df, "GeneID")
 
 #library(writexl)
 # Export both CSV and Excel
@@ -194,13 +204,13 @@ raw_counts_df <- tibble::rownames_to_column(raw_counts_df, "GeneID")
 #writexl::write_xlsx(raw_counts_df, file.path(tables_dir, "LOG2_ABI_raw_counts_clean.xlsx"))
 ```
 
-## 5. THRESHOLDS, COLORS
+# 6. THRESHOLDS, COLORS
 ```{r THRESHOLDS}
-#------------------------ Set Values: P.VAL, LFC ------------------------#
+#------------------------ 6.1 Set Values: P.VAL, LFC ------------------------#
 pad <- 0.05
 lfc_thresh <- 1.0
 
-#------------------------ COLORS ------------------------#
+#------------------------ 6.2 COLORS ------------------------#
 colors <- c(
   "COL" = "#1f78b4",   # blue
   "abi5-7" = "#e31a1c",   # red
@@ -208,10 +218,9 @@ colors <- c(
 )
 ```
 
-## 6. DESEQ2
+# 7. DESEQ2
 ```{r DESeq-run, message=FALSE}
-#------------------------ DESEQ2 MATRIX ------------------------#
-#library(DESeq2)
+#------------------------ 7.1 DESEQ2 MATRIX ------------------------#
 dds <- DESeqDataSetFromMatrix(
   countData = read.count,
   colData = sample_info,
@@ -220,14 +229,14 @@ dds <- DESeqDataSetFromMatrix(
 #leucine stress effect (LEU vs GM)
 #how mutants modify the leucine stress response (interaction terms)
 
-#------------------------ Prefilter ------------------------#
+#------------------------ 7.2 Prefilter ------------------------#
 keep <- rowSums(counts(dds)) >= 10
 dds <- dds[keep, ]
 
-#------------------------ RUN DESEQ2 ------------------------#
+#------------------------ 7.3 RUN DESEQ2 ------------------------#
 dds <- DESeq(dds)
 
-#------------------------ CHECK ------------------------#
+#------------------------ 7.4 CHECK ------------------------#
 #dds$treatment #check levels
 #dds$genotype
 #resultsNames(dds)
@@ -236,9 +245,9 @@ dds <- DESeq(dds)
 #saveRDS(dds, file.path(procdata_dir, "dds_IM_H_UM.rds"))
 ```
 
-## 7. VST; NORM COUNTS
+# 8. VST; NORM COUNTS
 ```{r VST PCA}
-#------------------------ VST ------------------------#
+#------------------------ 8.1 VST ------------------------#
 ## Variance stabilizing transformation
 #library(ggrepel)
 
@@ -246,7 +255,7 @@ vsd <- vst(dds, blind = FALSE) # blind ignores design
 colnames(vsd) <- rownames(sample_info) ## Sample names, match to colData
 stopifnot(all(colnames(vsd) == rownames(colData(dds))))  # Check
 
-#------------------------ PCA; PLOT ------------------------#
+#------------------------ 8.2 PCA; PLOT ------------------------#
 pca_data <- plotPCA(vsd, intgroup = c("genotype","treatment"), returnData = TRUE)
 percentVar <- round(100 * attr(pca_data, "percentVar"))
 
@@ -684,6 +693,13 @@ digraph LeuModel {
 
 }
 ")
+
+```
+
+```{r}
+if (params$session_info) {
+  sessionInfo()
+}
 
 ```
 
