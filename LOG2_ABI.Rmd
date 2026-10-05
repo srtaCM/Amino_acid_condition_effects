@@ -13,8 +13,6 @@ output:
     theme: cosmo
     highlight: tango
     df_print: paged
-    fig_width: 8
-    fig_height: 5
     includes:
       after_body: style.html
 ---
@@ -61,7 +59,6 @@ cat("Git Commit:", info$Git_Commit, "\n")
 #sessionInfo()
 #renv::init() #first time use to make an environment with the packages
 ```
-
 # 2. Packages, Load, and Installation
 ```{r INSTALL-PACKAGES, message=FALSE}
 #------------------------ LOAD PACKAGES ------------------------#
@@ -126,15 +123,14 @@ graphics_dir <- file.path("Results/Graphics")
 tables_dir   <- file.path("Results/Tables") 
 procdata_dir <- file.path("Results/Processed_data")
 
-dirs         <- c(graphics_dir, tables_dir, procdata_dir)
+dirs <- c(graphics_dir, tables_dir, procdata_dir)
 
 # Create the dirs if they don't exist
-invisible( sapply(
-  dirs,
-    function(d) {
-      if (!dir.exists(d)) {
-        dir.create(d, recursive = TRUE, showWarnings = FALSE)
-      } } ) )
+invisible(sapply(dirs,
+                 function(d) {
+                   if (!dir.exists(d)) {
+                     dir.create(d, recursive = TRUE, showWarnings = FALSE)
+                     } } ) )
 ```
 # 4. Read In Raw Counts, Prep Data
 ```{r READ-COUNTS, message=FALSE}
@@ -147,18 +143,16 @@ rownames(read.count) <- featcount[[1]] #Add GENES / names
 
 #------------------------ SET NAMES & INFO ------------------------#
 info <- tibble(old = count_cols) |>
-  tidyr::separate_wider_delim(
-    old,
-    delim    = "_",
-    names    = c("rep", "genotype", "treatment"),
-    too_many = "drop"
-  ) |>
-  mutate( genotype_clean = case_when(
-      genotype == "ABI" ~ "abi5-7",
-      genotype == "LOG" ~ "log2-2",
-      genotype == "COL" ~ "COL",
-      TRUE ~ genotype),
-    new = paste(genotype_clean, treatment, rep, sep = "_"))
+  tidyr::separate_wider_delim(old,
+                              delim    = "_",
+                              names    = c("rep", "genotype", "treatment"),
+                              too_many = "drop"
+                              ) |>
+  mutate(genotype_clean = case_when(genotype == "ABI" ~ "abi5-7",
+                                    genotype == "LOG" ~ "log2-2",
+                                    genotype == "COL" ~ "COL",
+                                    TRUE ~ genotype),
+         new = paste(genotype_clean, treatment, rep, sep = "_"))
 colnames(read.count) <- info$new
 
 #------------------------ DESIGN SAMPLE INFO ------------------------#
@@ -173,10 +167,9 @@ treatment <- stringr::str_extract(sample_names, "(GM|LEU)")
 treatment <- factor(treatment, levels = c("GM", "LEU"))
 
 # Build sample info
-sample_info <- data.frame(
-  row.names = sample_names,
-  genotype  = genotype,
-  treatment = treatment)
+sample_info <- data.frame(row.names = sample_names,
+                          genotype  = genotype,
+                          treatment = treatment)
 stopifnot(all(rownames(sample_info) == colnames(read.count))) # Safety check
 
 #------------------------ SAVE ------------------------#
@@ -194,27 +187,24 @@ pad        <- 0.05
 lfc_thresh <- 1.0
 
 #------------------------ COLORS ------------------------#
-colors <- c(
-  "COL" = "#32BECC",   # blue curacao
-  "abi5-7" = "#F9AC2F",   # citrus
-  "log2-2" = "#F07BA5"    # pink cosmos
-)
+colors <- c("COL" = "#32BECC",   # blue curacao
+            "abi5-7" = "#F9AC2F",   # citrus
+            "log2-2" = "#F07BA5"    # pink cosmos
+            )
 
 #------------------------ COLOR SWATCH ------------------------# 
 df_colors <- data.frame(Condition = names(colors), Color = colors)
 
-ggplot( df_colors, aes(x = Condition, y = 1, fill = Condition)) + geom_tile() + scale_fill_manual(values = colors) + theme_void() + theme( legend.position = "none", plot.margin = margin(2, 2, 2, 2)) + ggtitle("Color Swatch")
+ggplot(df_colors, aes(x = Condition, y = 1, fill = Condition)) + geom_tile() + scale_fill_manual(values = colors) + theme_void() + theme( legend.position = "none", plot.margin = margin(2, 2, 2, 2)) + ggtitle("Color Swatch")
 ```
 # 6. DESEQ2
 ```{r DESeq-run, message=FALSE}
 #------------------------ DESEQ2 MATRIX ------------------------#
-dds <- DESeqDataSetFromMatrix(
-  countData = read.count,
-  colData   = sample_info,
-  design    = ~ genotype * treatment) 
+dds <- DESeqDataSetFromMatrix(countData = read.count,
+                              colData   = sample_info,
+                              design    = ~ genotype * treatment) 
 
 # genotype * treatment <- asks whether the leucine response differs by genotype
-
 #------------------------ Pre-filter ------------------------#
 keep <- rowSums(counts(dds)) >= 10
 dds  <- dds[keep, ]
@@ -238,16 +228,17 @@ resultsNames(dds)
 vsd <- vst(dds, blind = FALSE) # blind ignores design
 colnames(vsd) <- rownames(sample_info) ## Sample names, match to colData
 stopifnot(all(colnames(vsd) == rownames(colData(dds))))  # Check
+
+mat <- assay(vsd) #expression matrix
 ```
 # 8. PCA; PLOT
 ```{r PCA}
 #------------------------ PCA; PLOT ------------------------#
-pca_data   <- plotPCA( vsd, intgroup = c("genotype", "treatment"), returnData = TRUE)
-percentVar <- round( 100 * attr( pca_data, "percentVar"))
+pca_data   <- plotPCA(vsd, intgroup = c("genotype", "treatment"), returnData = TRUE)
+percentVar <- round(100 * attr(pca_data, "percentVar"))
 
 p_pca      <- ggplot(pca_data, 
-                aes(PC1, PC2, color = genotype, shape = treatment)
-                ) +
+                aes(PC1, PC2, color = genotype, shape = treatment)) +
   geom_point(size = 5, stroke = 1.5, alpha = 0.85) +
   scale_color_manual(values = colors, name = "genotype") +
   xlab(paste0("PC1: ", percentVar[1], "% variance")) +
@@ -278,52 +269,40 @@ print(p_pca)
 ```{r SAMPLE DISTANCE}
 #------------------------ SAMPLE DISTANCE ------------------------#
 sample_dist <- dist(t(assay(vsd)))  # t samples as rows
-hc <- hclust(sample_dist, method = "ward.D2")
-dend_data <- ggdendro::dendro_data(hc)
+hc          <- hclust(sample_dist, method = "ward.D2")
+dend_data   <- ggdendro::dendro_data(hc)
 
 #------------------------ PLOT SAMPLE DISTANCE ------------------------#
-sample_dist <- dist(t(assay(vsd)))  # transpose so samples are rows
-hc <- hclust(sample_dist, method = "ward.D2")
-dend_data <- ggdendro::dendro_data(hc)
-
-# Create label dataframe and add metadata
-label_df <- dend_data$labels
+label_df <- dend_data$labels # Create label dataframe and add metadata
 
 sample_info <- as.data.frame(colData(vsd))
 
-label_df$genotype <- sample_info$genotype[match(label_df$label, rownames(sample_info))]
+label_df$genotype  <- sample_info$genotype[match(label_df$label, rownames(sample_info))]
 label_df$treatment <- sample_info$treatment[match(label_df$label, rownames(sample_info))]
-label_df$color <- colors[label_df$genotype]
+label_df$color     <- colors[label_df$genotype]
 
 # Bold LEU samples
 label_df$fontface <- ifelse(label_df$treatment == "LEU", "bold", "plain")
 
 p_dend <- ggplot() +
   geom_segment(data = ggdendro::segment(dend_data),
-               aes(x = x, y = y, xend = xend, yend = yend)
-  ) +
+               aes(x = x, y = y, xend = xend, yend = yend)) +
   geom_text(data = label_df, 
-            aes(
-              x = x,
-              y = y,
-              label = label,
-              color = color,
-              fontface = fontface),
+            aes(x = x,
+                y = y,
+                label = label,
+                color = color,
+                fontface = fontface),
             hjust = -0.1,
-            size = 3.5
-            ) +
+            size = 3.5) +
   scale_color_identity() +
   coord_flip() +
   scale_y_reverse(expand = c(0.2, 0)) +
   ggdendro::theme_dendro() +
-  labs(
-    title = "VST Clustering (Ward.D2)",
-    subtitle = "Color = Genotype, Bold = LEU"
-  ) +
-  theme(
-    plot.title = element_text(hjust = 0.5),
-    plot.subtitle = element_text(hjust = 0.5)
-  )
+  labs(title = "VST Clustering (Ward.D2)",
+       subtitle = "Color = Genotype, Bold = LEU") +
+  theme(plot.title = element_text(hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5))
 p_dend
 
 #------------------------ SAVE ------------------------#
@@ -334,8 +313,7 @@ p_dend
 sample_dist <- dist(t(assay(vsd)))
 sampleDistMatrix <- as.matrix(sample_dist)
 
-rownames(sampleDistMatrix) <- paste( colData(dds)$genotype, colData(dds)$treatment,
-sep = "_")
+rownames(sampleDistMatrix) <- paste( colData(dds)$genotype, colData(dds)$treatment, sep = "_")
 colnames(sampleDistMatrix) <- rownames(sampleDistMatrix)
 
 p2 <- pheatmap( sampleDistMatrix, clustering_distance_rows = sample_dist, clustering_distance_cols = sample_dist, main = "Sample Distance Heatmap")
@@ -350,94 +328,71 @@ p2
 sampleDist_cor   <- as.dist(1 - cor(assay(vsd)))
 sampleDistMatrix <- as.matrix(sampleDist_cor)
 
-s2s <- pheatmap(
-  sampleDistMatrix,
-  clustering_distance_rows = sampleDist_cor,
-  clustering_distance_cols = sampleDist_cor,
-  annotation_col = as.data.frame(colData(dds)[, c("genotype","treatment")]),
-  main = "Sample-to-sample distance (1 - correlation)",
-  treeheight_row = 75,
-  treeheight_col = 60,
-  cellheight = 25,
-  cellwidth  = 25,
-  fontsize = 9
-)
-
+s2s <- pheatmap(sampleDistMatrix,
+                clustering_distance_rows = sampleDist_cor,
+                clustering_distance_cols = sampleDist_cor,
+                annotation_col = as.data.frame(colData(dds)[, c("genotype","treatment")]),
+                main = "Sample-to-sample distance (1 - correlation)",
+                treeheight_row = 75,
+                treeheight_col = 60,
+                cellheight = 25,
+                cellwidth  = 25,
+                fontsize = 9)
 ```
 # 11. DESEQ CONTRASTS
 ```{r}
-#------------------------ CONTRAST FUNCTION ------------------------#
-# Builds contrasts between genotype/treatment combinations.
-condition_contrast <- function(dds, 
-                               genotype_1, treatment_1, 
-                               genotype_0, treatment_0) { 
-  
-  # numerator condition
-  nd1 <- data.frame(genotype  = factor(genotype_1, levels  = levels(colData(dds)$genotype)),
-                    treatment = factor(treatment_1, levels = levels(colData(dds)$treatment)))
-  # denominator condition
-  nd0 <- data.frame(genotype  = factor(genotype_0, levels  = levels(colData(dds)$genotype)),
-                    treatment = factor(treatment_0, levels = levels(colData(dds)$treatment)))
-  
-  # Get design matrix rows for each group
-  X1 <- model.matrix(design(dds), nd1)
-  X0 <- model.matrix(design(dds), nd0)
-  
-  v  <- as.numeric(X1 - X0) # Calculate contrasts
-  
-  # check that they match the model coefficients
-  if (length(v) != length(resultsNames(dds))) {
-    stop("Model-matrix columns do not match DESeq2 coefficients.")
-  } 
-  v #return contrast vector
+#------------------------ CONTRAST HELPER FUNCTION ------------------------#
+condition_contrast <- function(dds, g1, t1, g0, t0) {
+  X1 <- model.matrix(design(dds), 
+                     data.frame(genotype = factor(g1, levels = levels(colData(dds)$genotype)),
+                                treatment = factor(t1, levels = levels(colData(dds)$treatment))
+                                )
+                     )
+  X0 <- model.matrix(design(dds),
+                     data.frame(genotype = factor(g0, levels = levels(colData(dds)$genotype)),
+                                treatment = factor(t0, levels = levels(colData(dds)$treatment))
+                                )
+                     )
+as.numeric(X1 - X0)
 }
 
 #------------------------ RUNNING FUNCTION ------------------------#
-run_result <- function(label,
-                       contrast_vector = NULL,
-                       result_name     = NULL,
-                       lfc_shrink      = FALSE,
-                       lfc_coef        = NULL,
-                       shrink_type     = "apeglm") {
-# Run LFC Shrink
-  if (lfc_shrink) {
-    if (is.null(lfc_coef)) { # Require coefficient name for shrinkage
-      stop("Provide lfc_coef when lfc_shrink = TRUE.")
-    }
-    # Compute shrunken results
-    res <- lfcShrink( dds, coef = lfc_coef, type = shrink_type)
-
-  } else {
-    #run deseq results
-    if (is.null(contrast_vector)) {
-      stop("Provide contrast_vector when lfc_shrink = FALSE.")
-    }
-    res  <- results( dds, contrast = contrast_vector, alpha = 0.05)
-  }
-  res    <- res[order(res$padj, na.last = TRUE), ] # Sort by adj p val
-  
-  # Create data frame
-  res_df <- data.frame(
-    gene_id     = rownames(res),
-    as.data.frame(res),
-    row.names   = NULL,
-    check.names = FALSE)
-
-#  write.csv( res_df, file.path(tables_dir, paste0(label, ".csv")), row.names = FALSE)
-#  writexl::write_xlsx( res_df, file.path(tables_dir, paste0(label, ".xlsx")))
-
-  return(res) #return DESEQ results object
+# Build a contrast between two genotype/treatment combinations
+condition_contrast <- function(dds, g1, t1, g0, t0) {
+  X1 <- model.matrix(design(dds),
+                     data.frame(genotype  = factor(g1, levels = levels(colData(dds)$genotype)),
+                                treatment = factor(t1, levels = levels(colData(dds)$treatment)))
+                     )
+  X0 <- model.matrix(design(dds),
+                     data.frame(genotype  = factor(g0, levels = levels(colData(dds)$genotype)),
+                                treatment = factor(t0, levels = levels(colData(dds)$treatment)))
+                     )
+  as.numeric(X1 - X0)
 }
-```
-# 13. CONTRAST TESTING
-```{r BIOLOGICAL TESTING}
+
+# Run DESeq2 results or LFC shrinkage
+run_result <- function(contrast = NULL, coef = NULL) {
+  if (!is.null(coef)) {
+    return(lfcShrink(dds, coef = coef, type = "apeglm"))
+  }
+  results(dds, contrast = contrast, alpha = 0.05)
+}
+
 #------------------------ GENOTYPE RESPONSES ------------------------#
 # A. Leu response within each genotype: genes responding to amino-acid exposure
-# Test which genes respond to amino-acid treatment within each genotype
-res_COL_Leu <- run_result(label = "01_COL_Leu_vs_GM", contrast_vector = condition_contrast(dds, "COL", "LEU", "COL", "GM"))
-res_log2_2_Leu <- run_result(label = "02_log2_2_Leu_vs_GM", contrast_vector = condition_contrast(dds, "log2-2", "LEU", "log2-2", "GM"))
-res_abi5_7_Leu <- run_result(label = "03_abi5_7_Leu_vs_GM", contrast_vector = condition_contrast(dds, "abi5-7", "LEU", "abi5-7", "GM"))
-
+res_COL_Leu <- run_result(contrast = condition_contrast(dds,
+                                                        "COL", "LEU", "COL", "GM"))
+res_log2_Leu <- run_result(contrast = condition_contrast(dds, 
+                                                         "log2-2", "LEU", "log2-2", "GM"))
+res_abi5_Leu <- run_result(contrast = condition_contrast(dds, 
+                                                         "abi5-7", "LEU", "abi5-7", "GM"))
+#------------------------ GENOTYPExLEU INTERACTION ------------------------#
+# D. These test whether the transcriptional response to LEU differs from COL.
+res_log2_interaction <- run_result(coef = "genotypelog2.2.treatmentLEU")
+res_abi5_interaction <- run_result(coef = "genotypeabi5.7.treatmentLEU")
+```
+# other CONTRAST TESTING
+```{r BIOLOGICAL TESTING}
 #------------------------ BASELINE GENOTYPE EFFECTS ------------------------#
 # B. Tests whether mutants differ from COL under control conditions
 res_log2_2_vs_COL_GM <- run_result(label = "04_log2_2_vs_COL_GM", contrast_vector = condition_contrast( dds, "log2-2", "GM", "COL", "GM"))
@@ -447,11 +402,6 @@ res_abi5_7_vs_COL_GM <- run_result(label = "05_abi5_7_vs_COL_GM", contrast_vecto
 # C. Testing if mutants differ from COl after Leu trt
 res_log2_2_vs_COL_Leu <- run_result(label = "06_log2_2_vs_COL_Leu", contrast_vector = condition_contrast( dds, "log2-2", "LEU", "COL", "LEU"))
 res_abi5_7_vs_COL_Leu <- run_result(label = "07_abi5_7_vs_COL_Leu", contrast_vector = condition_contrast( dds, "abi5-7", "LEU", "COL", "LEU"))
-
-#------------------------ GENOTYPExLEU INTERACTION ------------------------#
-# D. These test whether the transcriptional response to LEU differs from COL.
-res_log2_interaction <- results(dds, name = "genotypelog2.2.treatmentLEU", alpha = 0.05)
-res_abi5_interaction <- results(dds, name = "genotypeabi5.7.treatmentLEU", alpha = 0.05)
 
 #------------------------ MUTANT COMPARISON OF LEU RESPONSE ------------------------#
 # E. Identifies genes responding differently to Leu in abi5-7 and log2-2
@@ -492,7 +442,7 @@ summary_table <- data.frame(
 
 summary_table
 ```
-# 14. VOLCANO
+#  VOLCANO
 ```{r VOLCANO}
 #------------------------ VOLCANO ------------------------#
 plot_volcano <- function(res, title){
@@ -532,8 +482,7 @@ v3
 #ggsave( file.path(graphics_dir,"Figure3B_log2_2_Volcano.pdf"), v2, width = 7, height = 6 )
 #ggsave( file.path(graphics_dir,"Figure3C_abi5_7_Volcano.pdf"), v3, width = 7, height = 6 )
 ```
-
-# 15. SPECIFIC CANDIDATE GENES AND PLOTS
+#  SPECIFIC CANDIDATE GENES AND PLOTS
 ```{r CANDIDATE GENES AND PLOTS}
 #------------------------ CANDIDATE GENES & PLOTS ------------------------#
 candidate_genes <- c( "AT1G01010", "AT1G01020", "AT1G01030" )
@@ -554,212 +503,85 @@ for(gene in candidate_genes){
 
 #ggsave(file.path(graphics_dir, paste0(gene, "_expression.pdf")), p, width = 6, height = 5 ) }
 ```
-
-# 16. HEATMAP ALL
+#  HEATMAP ALL
 ```{r}
-# annotations
-ann_col <- as.data.frame(colData(dds)[, c("genotype", "treatment")])
+#------------------------ HEATMAP HELPERS ------------------------#
+ann_col <- as.data.frame(colData(dds)[ , c("genotype", "treatment")]) # annotations
 
-plot_DE_heatmap <- function(res, expr_mat, annotation_col, title) {
-  sig <- subset(
-    as.data.frame(res),
-    !is.na(padj) &
-      padj < 0.05 &
-      abs(log2FoldChange) > 1.5)
-
-  genes <- rownames(sig)
-  if(length(genes) < 2) {
-    message(paste("Not enough significant genes for", title))
-    return(NULL)
+# Get significant genes
+get_sig_genes <- function(res, 
+                          padj_cutoff = 0.05,
+                          lfc_cutoff = 1.5) {
+  rownames(subset(as.data.frame(res),
+                  !is.na(padj) &
+                    padj < padj_cutoff &
+                    abs(log2FoldChange) > lfc_cutoff))
+  }
+prepare_heatmap_matrix <- function(expr_mat, genes) {
+  hm <- expr_mat[genes, ]
+  
+  hm <- hm[apply(hm, 1, sd) > 0, ]  # Remove invariant genes
+  
+  hm <- t(scale(t(hm))) # Row z-score
+  hm <- hm[complete.cases(hm), ]
+  hm
   }
 
-  hm <- expr_mat[genes, ]
-  # z-score
-  hm <- t(scale(t(hm)))
+plot_DE_heatmap <- function(res, expr_mat, annotation_col, title) {
+  genes <- get_sig_genes(res)
+  if (length(genes) < 2) {
+    message("Not enough significant genes for ", title)
+    return(NULL)
+  }
+  
+  hm <- prepare_heatmap_matrix(expr_mat, genes)
 
-  pheatmap(
-    hm,
-    annotation_col = annotation_col,
-    show_rownames = FALSE,
-    clustering_rows = TRUE,
-    clustering_cols = TRUE,
-    angle_col = 45,
-        color = colorRampPalette(
-      c("navy", "white", "firebrick3")
-        )(100),
-    main = title)
-}
+  pheatmap(hm,
+           annotation_col = annotation_col,
+           show_rownames = FALSE,
+           angle_col = 45,
+           color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
+           main = title)
+  }
 
 H1 <- plot_DE_heatmap(res_COL_Leu, mat, ann_col, "LEU vs GM")
 #ggsave( file.path(graphics_dir,"01_Leu_vs_GM_heatmap.png"), H1, width = 10, height = 8)
+H2 <- plot_DE_heatmap(res_log2_Leu, mat, ann_col, "log2-2: LEU vs GM")
+H3 <- plot_DE_heatmap(res_abi5_Leu, mat, ann_col, "abi5-7: LEU vs GM")
 
-H2 <- plot_DE_heatmap(res_log2_2_Leu, mat, ann_col, "log2-2: LEU vs GM")
-#ggsave( file.path(graphics_dir,"02_log2_2_Leu_vs_GM_heatmap.png"), H2, width = 8, height = 10 )
-
-H3 <- plot_DE_heatmap(res_abi5_7_Leu, mat, ann_col, "abi5-7: LEU vs GM")
-#ggsave( file.path(graphics_dir,"03_abi5_7_Leu_vs_GM_heatmap.png"), H3, width = 8, height = 10 )
-```
-# 17. LEU HEATMAP
-```{r LEU HEATMAP}
 plot_LEU_only_heatmap <- function(res, expr_mat, annotation_col, title) {
-  sig <- subset(
-    as.data.frame(res),
-    !is.na(padj) &
-      padj < 0.05 &
-      abs(log2FoldChange) > 1.5)
+  genes <- get_sig_genes(res)
 
-genes <- rownames(sig)
-if(length(genes) < 2) {
-  message(paste("Not enough significant genes for", title))
-  return(NULL)
+  if (length(genes) < 2) {
+    message("Not enough significant genes for ", title)
+    return(NULL)
   }
 
-  keep <- annotation_col$treatment == "LEU"  # Keep only LEU samples
-  hm <- expr_mat[genes, keep]
-  ann_sub <- annotation_col[keep, ]
+  keep <- annotation_col$treatment == "LEU"
 
-  hm <- t(scale(t(hm))) # z-score
-  hm <- hm[!apply(is.na(hm), 1, any), ] # Remove rows that became NaN after scaling
+  hm <- prepare_heatmap_matrix(expr_mat[ , keep], genes)
 
-  pheatmap(
-    hm,
-    annotation_col = ann_sub,
-    show_rownames = FALSE,
-    clustering_rows = TRUE,
-    clustering_cols = TRUE,
-    angle_col = 45,
-    color = colorRampPalette(
-      c("navy", "white", "firebrick3")
-    )(100),
-    main = title)
+  pheatmap(hm,
+           annotation_col = annotation_col[keep, ],
+           show_rownames = FALSE,
+           angle_col = 45,
+           color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
+           main = title)
 }
 
-H1_1 <- plot_LEU_only_heatmap(res_COL_Leu, mat, ann_col, "LEU-responsive genes (LEU samples only)")
-#ggsave( file.path(graphics_dir,"01_1_Leu_vs_GM_heatmap.png"), H1_1, width = 10, height = 8)
+H1_1 <- plot_LEU_only_heatmap(res_COL_Leu, mat, ann_col, "COL-responsive genes (LEU samples)")
+H2_1 <- plot_LEU_only_heatmap(res_log2_Leu, mat, ann_col, "log2-2 responsive genes (LEU samples)")
+H3_1 <- plot_LEU_only_heatmap(res_abi5_Leu, mat, ann_col, "abi5-7 responsive genes (LEU samples)")
 ```
-
-
-```{r}
-gm_genes <- rownames(
-  subset(
-    as.data.frame(res_abi5_7_vs_COL_GM),
-    !is.na(padj) &
-      padj < 0.05 &
-      abs(log2FoldChange) > 1.5)
-  )
-
-leu_genes <- rownames(
-  subset(
-    as.data.frame(res_abi5_7_vs_COL_Leu),
-    !is.na(padj) &
-      padj < 0.05 &
-      abs(log2FoldChange) > 1.5)
-  )
-
-cat("GM DEGs:", length(gm_genes), "\n")
-cat("LEU DEGs:", length(leu_genes), "\n")
-cat("Shared:", length(intersect(gm_genes, leu_genes)), "\n")
-cat("GM only:", length(setdiff(gm_genes, leu_genes)), "\n")
-cat("LEU only:", length(setdiff(leu_genes, gm_genes)), "\n")
-
-abi5_int_df <- as.data.frame(res_abi5_interaction)
-
-abi5_top <- abi5_int_df[
-  order(abs(abi5_int_df$log2FoldChange),
-        decreasing = TRUE),
-]
-
-head(
-  abi5_top[, c(
-    "log2FoldChange",
-    "lfcSE",
-    "stat",
-    "pvalue",
-    "padj"
-  )],
-  50)
-
-abi5_large_effect <- subset(
-  abi5_top,
-  abs(log2FoldChange) > 1)
-
-head(abi5_large_effect, 50)
-
-keep <- ann_col$genotype %in% c("COL", "abi5-7") &
-        ann_col$treatment == "LEU"
-
-mat_sub <- mat[, keep]
-ann_sub <- ann_col[keep, ]
-
-plot_DE_heatmap(
-  res_abi5_7_vs_COL_Leu,
-  mat_sub,
-  ann_sub,
-  "abi5-7 vs COL (LEU)")
-
-count_deg <- function(res){
-  sum(
-    !is.na(res$padj) &
-      res$padj < 0.05 &
-      abs(res$log2FoldChange) > 1.5)
-  }
-count_deg <- function(res){
-  sum(
-    !is.na(res$padj) &
-      res$padj < 0.05 &
-      abs(res$log2FoldChange) > 1.5)
-  }
-
-summary_table <- data.frame(
-  Contrast = c(
-    "COL LEU vs GM",
-    "log2-2 LEU vs GM",
-    "abi5-7 LEU vs GM",
-    "log2-2 vs COL GM",
-    "abi5-7 vs COL GM",
-    "log2-2 vs COL LEU",
-    "abi5-7 vs COL LEU",
-    "log2-2 x LEU",
-    "abi5-7 x LEU"),
-  DEGs = c(
-    count_deg(res_COL_Leu),
-    count_deg(res_log2_2_Leu),
-    count_deg(res_abi5_7_Leu),
-    count_deg(res_log2_2_vs_COL_GM),
-    count_deg(res_abi5_7_vs_COL_GM),
-    count_deg(res_log2_2_vs_COL_Leu),
-    count_deg(res_abi5_7_vs_COL_Leu),
-    count_deg(res_log2_interaction),
-    count_deg(res_abi5_interaction))
-  )
-
-summary_table
-#write.csv(summary_table, "DEG_summary_table.csv", row.names = FALSE)
-```
-
 # 18. K MEANS CLUSTERING PLOTS
-```{r}
+```{r K Means Clustering Plot}
 #------------------------ KMEANS ------------------------#
 # Elbow Method + Silhouette Analysis
+genes <- get_sig_genes(res_COL_Leu) # Significant genes
+keep <- ann_col$treatment == "LEU" # LEU samples only
+hm <- prepare_heatmap_matrix(mat[ , keep], genes)
 
-# Significant genes
-sig <- subset(as.data.frame(res_COL_Leu),
-              !is.na(padj) &
-                padj < 0.05 &
-                abs(log2FoldChange) > 1.5)
-genes <- rownames(sig)
-
-# LEU samples only
-keep <- ann_col$treatment == "LEU"
-hm <- mat[genes, keep]
 ann_sub <- ann_col[keep, ]
-
-# Remove invariant genes
-hm <- hm[apply(hm, 1, sd) > 0, ]
-
-# Row z-score
-hm <- t(scale(t(hm)))
-hm <- hm[complete.cases(hm), ]
 cat("Genes retained:", nrow(hm), "\n")
 
 # Evaluate k values
@@ -782,9 +604,7 @@ for(i in seq_along(k_range)) {
 }
 
 # Elbow Plot
-elbow_plot <- ggplot(data.frame(k = k_range, WCSS = wcss),
-                     aes(k, WCSS)
-                     ) +
+elbow_plot <- ggplot(data.frame(k = k_range, WCSS = wcss), aes(k, WCSS)) +
   geom_line(linewidth = 1) +
   geom_point(size = 3) +
   theme_bw() +
@@ -794,8 +614,7 @@ elbow_plot <- ggplot(data.frame(k = k_range, WCSS = wcss),
 
 # Silhouette Plot
 sil_plot <- ggplot(data.frame(k = k_range, silhouette = silhouette_avg),
-                   aes(k, silhouette)
-                   ) +
+                   aes(k, silhouette)) +
   geom_line(linewidth = 1) +
   geom_point(size = 3) +
   theme_bw() +
@@ -804,7 +623,7 @@ sil_plot <- ggplot(data.frame(k = k_range, silhouette = silhouette_avg),
        y = "Average Silhouette Width")
 
 # Display plots side-by-side
-sidebyside <- grid.arrange(elbow_plot, 
+grid.arrange(elbow_plot, 
              sil_plot,
              ncol = 2)
 #ggsave( file.path(graphics_dir,"01_1_Kmeans.png"), sidebyside, width = 10, height = 8)
@@ -856,121 +675,177 @@ plot(k_range, silhouette_avg, type = "b", pch = 19)
 
 # 19. LEU CLUSTERING HEATMAPS
 ```{r}
-#------------------------ LEU ONLY KMEANS GENES & PLOTS ------------------------#
-plot_LEU_only_heatmap <- function(res,
-                                  expr_mat,
-                                  annotation_col,
-                                  title,
-                                  padj_cutoff = 0.05,
-                                  lfc_cutoff = 1.5,
-                                  k = 5
-                                  ) {
+#------------------------ RUN KMEANS HEATMAP ------------------------#
+plot_LEU_kmeans_heatmap <- function(res,
+                                    expr_mat,
+                                    annotation_col,
+                                    title,
+                                    padj_cutoff = 0.05,
+                                    lfc_cutoff = 1.5,
+                                    k = 5) {
   # Significant genes
-  sig <- as.data.frame(res)
-  sig <- sig[!is.na(sig$padj) &
-               sig$padj < padj_cutoff &
-               abs(sig$log2FoldChange) > lfc_cutoff,
-             ]
-  
-  if (nrow(sig) < 2){
+  sig <- subset(as.data.frame(res),
+                !is.na(padj) &
+                  padj < padj_cutoff &
+                  abs(log2FoldChange) > lfc_cutoff)
+
+  if (nrow(sig) < 2) {
     message("Fewer than 2 significant genes found.")
     return(NULL)
-    }
+  }
 
   genes <- rownames(sig)
-  
-  # LEU samples only
-  keep <- annotation_col$treatment == "LEU"
+
+  keep <- annotation_col$treatment == "LEU"  # LEU samples only
+
   hm <- expr_mat[genes, keep, drop = FALSE]
   ann <- annotation_col[keep, , drop = FALSE]
-  
-genotypes <- unique(as.character(ann$genotype))
 
-hm_avg <- do.call(cbind,
-                  lapply(genotypes,
-                         function(g) {
-                           idx <- ann$genotype == g
-                           cat(g, "samples =", sum(idx), "\n")
-                           rowMeans(hm[, idx, drop = FALSE], na.rm = TRUE)
-                           }
-                         ))
-colnames(hm_avg) <- genotypes
-rownames(hm_avg) <- rownames(hm)
+  # Force genotype order
+  genotypes <- c("COL", "abi5-7", "log2-2")
 
-  # Z-score by gene
-  hm_avg <- t(scale(t(hm_avg)))
+  # Average replicates within genotype
+  hm_avg <- do.call(cbind,
+                    lapply(genotypes, function(g) {
+                      idx <- ann$genotype == g
+                      rowMeans(hm[, idx, drop = FALSE],
+                               na.rm = TRUE)
+                      })
+                    )
 
-  # Remove rows containing NA/NaN
-  hm_avg <- hm_avg[apply(hm_avg, 1, 
-                         function(x) all(is.finite(x))), , drop = FALSE ]
+  colnames(hm_avg) <- genotypes
+  rownames(hm_avg) <- rownames(hm)
 
-  sig2 <- sig[rownames(hm_avg), ] #apply results to filtered matrix
-  
-# K-means clustering
+  hm_avg <- t(scale(t(hm_avg)))   # Row z-score
+
+  # Remove rows with NA values
+  hm_avg <- hm_avg[apply(hm_avg, 1, function(x) all(is.finite(x))), , drop = FALSE]
+
+  # Keep results table synced with filtered matrix
+  sig2 <- sig[rownames(hm_avg), ]
+
+  # K-means clustering
+  set.seed(123)
+
   km <- kmeans(hm_avg, centers = k, nstart = 50)
+  cluster_sizes <- table(km$cluster)
   ord <- order(km$cluster)
 
-row_ann <- data.frame(Cluster = factor(km$cluster))
-rownames(row_ann) <- rownames(hm_avg)
+  row_ann <- data.frame(Cluster = factor(km$cluster))
+  rownames(row_ann) <- rownames(hm_avg)
 
-cluster_colors <- c(
-  "#1b9e77",
-  "#d95f02",
-  "#7570b3",
-  "#e7298a",
-  "#66a61e",
-  "#e6ab02",
-  "#a6761d",
-  "#666666")
+  cluster_colors <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#666666")
 
-ann_colors <- list(Cluster = setNames(cluster_colors[1:k], as.character(1:k)))
+  ann_colors <- list(Cluster = setNames(cluster_colors[1:k], as.character(1:k)))
 
-ph <- pheatmap(hm_avg[ord, ],
-         annotation_row = row_ann[ord, , drop = FALSE],
-         annotation_colors = ann_colors,
-         cluster_rows = FALSE,
-         cluster_cols = FALSE,
-         show_rownames = FALSE,
-         show_colnames = TRUE,
-         gaps_row = cumsum(table(km$cluster)),
-         annotation_names_row = FALSE,
-         main = title,
-         angle_col = 45,
-         color = colorRampPalette(c("navy", "white", "firebrick3"))(100))
+  ph <- pheatmap(hm_avg[ord, ],
+                 annotation_row = row_ann[ord, , drop = FALSE],
+                 annotation_colors = ann_colors,
+                 cluster_rows = FALSE,
+                 cluster_cols = FALSE, #already set before
+                 show_rownames = FALSE,
+                 show_colnames = TRUE,
+                 annotation_names_row = FALSE,
+                 gaps_row = cumsum(cluster_sizes)[-length(cluster_sizes)],
+                 angle_col = 45,
+                 color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
+                 main = paste0(title, " (k = ", k, ")"))
 
-cluster_df <- data.frame(gene = rownames(hm_avg), cluster = km$cluster, log2FC = sig2$log2FoldChange)
-return(list(plot = ph,
-            clusters = cluster_df,
-            kmeans = km,
-            cluster_sizes = table(km$cluster),
-            hm_avg = hm_avg))
+  cluster_df <- data.frame(gene = rownames(hm_avg), cluster = km$cluster, log2FC = sig2$log2FoldChange)
+
+  return(list(plot = ph,
+              clusters = cluster_df,
+              kmeans = km,
+              cluster_sizes = cluster_sizes,
+              hm_avg = hm_avg)
+  )
 }
 
-tapply(
-  abs(clust_df$log2FC),
-  clust_df$cluster,
-  mean
-)
-boxplot(
-  abs(log2FC) ~ cluster,
-  data = clust_df
-)
-cluster1_genes <- subset(clust_df, cluster == 1)
+H1_2 <- plot_LEU_kmeans_heatmap(res = res_COL_Leu,
+                              expr_mat = mat,
+                              annotation_col = ann_col,
+                              title = "K-Means clustering of LEU-responsive genes",
+                              k = 5)
+clust_df <- H1_2$clusters
+table(clust_df$cluster)
 
-
-#------------------------ RUN HEATMAP ------------------------#
-H1_2 <- plot_LEU_only_heatmap(res = res_COL_Leu, expr_mat = mat, annotation_col = ann_col, "K-Means clustering of genotype-specific LEU-responsive genes)", k = 5)
-#ggsave(file.path(graphics_dir, "01_2_cluster_leu_heatmap.png"), H1_2$plot$gtable, width = 8, height = 6, dpi = 300)
-
-H1_2$cluster_sizes
-clust_df <- H1_2$clusters # table
+tapply(abs(clust_df$log2FC), clust_df$cluster, mean)
 
 #------------------------ WRITE CLUSTERS ------------------------#
-#write_xlsx(split(cluster_df, cluster_df$cluster),  path = file.path(tables_dir, "LEU_gene_clusters.xlsx"))
+#write_xlsx(split(clust_df, clust_df$cluster),  path = file.path(tables_dir, "LEU_gene_clusters.xlsx"))
+#ggsave(file.path(graphics_dir, "01_2_cluster_leu_heatmap.png"), plot = H1_2$plot$gtable, width = 10, height = 8, dpi = 300)
 ```
 
 
 ```{r}
+#------------------------ CLUSTERS ENRICHMENT ------------------------#
+clusters <- sort(unique(clust_df$cluster))
+clust_df$log2FC <- res_COL_Leu[match(clust_df$gene, rownames(res_COL_Leu)),
+                               "log2FoldChange" ]
+
+min_genes <- 5
+
+GO_results <- list()
+GO_sheets <- list()
+
+for(cl in clusters){
+  Clust_genes <- subset(clust_df, cluster == cl)$gene
+
+  cat("Cluster", cl, "Genes:", length(Clust_genes), "\n")
+
+  if(length(Clust_genes) >= min_genes){
+    ego_res <- enrichGO(
+      gene          = Clust_genes,
+      OrgDb         = org.At.tair.db,
+      keyType       = "TAIR",
+      ont           = "BP",
+      pAdjustMethod = "BH",
+      pvalueCutoff  = 0.05,
+      qvalueCutoff  = 0.05)
+
+    # Remove redundant terms
+    if(nrow(as.data.frame(ego_res)) > 0){
+      ego_res <- simplify(ego_res, cutoff = 0.7, by = "p.adjust", select_fun = min)
+
+      # Calculate term similarity matrix
+      ego_res <- pairwise_termsim(ego_res)
+      emapplot(ego_res, showCategory = 30)
+      
+      go_df <- as.data.frame(ego_res)
+      cat("GO terms after simplification:", nrow(go_df), "\n" )
+
+      GO_results[[paste0("Cluster", cl)]] <- ego_res
+      GO_sheets[[paste0("Cluster_", cl)]] <- go_df
+    }
+  }
+}
+
+# Save all clusters in one workbook
+#write_xlsx(GO_sheets, path = file.path(tables_dir, "GO_enrichment_clusters.xlsx"))
+
+#------------------------ GO DOT PLOTS ------------------------#
+go_plot_dir <- file.path(graphics_dir, "GO_dotplots")
+
+for(cl_name in names(GO_results)) {
+  ego_res <- GO_results[[cl_name]]
+  
+  if(nrow(as.data.frame(ego_res)) == 0) {
+    cat(cl_name, ": No significant GO terms\n") 
+    next
+    }
+
+p <- dotplot(ego_res, x = "Count", color = "p.adjust", size = "Count", orderBy = "p.adjust", showCategory = 15, font.size = 14) +
+  ggtitle(paste("GO Enrichment -", cl_name)) +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+p
+#ggsave(filename = file.path(graphics_dir, paste0(cl_name, "_GO_dotplot.png")), plot = p, width = 6, height = 6, dpi = 300)
+#cat(cl_name, ": Dotplot saved\n")
+}
+
+gene_clusters <- split(clust_df$gene, clust_df$cluster)
+
+
 # Combine simplified GO results
 
 go_combined <- bind_rows(
@@ -1018,13 +893,10 @@ p_go <- ggplot(go_combined,
        size = "Gene Count"
   ) +
   theme_bw(base_size = 12) +
-  theme(strip.text = element_text(face = "bold",
-                                  size = 12),
-    axis.text.y = element_text(size = 12,
-                               face = "bold"),
+  theme(strip.text = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(size = 12, face = "bold"),
     axis.text.x = element_text(size = 11),
-    legend.title = element_text(face = "bold",
-                                size = 10),
+    legend.title = element_text(face = "bold", size = 10),
     legend.text = element_text(size = 11),
     plot.title = element_text(face = "bold", hjust = 0.5, size = 14))
 p_go
@@ -1095,13 +967,13 @@ p_clusters <- ggplot(cluster_long,
   )
 p_clusters
 
-ggsave(
-  file.path(graphics_dir, "Cluster_expression_profiles.png"),
-  p_clusters,
-  width = 7,
-  height = 5,
-  dpi = 300
-)
+#ggsave(
+#  file.path(graphics_dir, "Cluster_expression_profiles.png"),
+#  p_clusters,
+#  width = 7,
+#  height = 5,
+#  dpi = 300
+#)
 ```
 
 
@@ -1164,7 +1036,6 @@ lineclust <- ggplot() +
 ```
 
 
-
 ```{r}
 for(cl_name in names(GO_results)) {
 
@@ -1172,130 +1043,22 @@ for(cl_name in names(GO_results)) {
 
   if(nrow(as.data.frame(ego_res)) == 0) next
 
-  p <- emapplot(
-    ego_res,
-    showCategory = 30
-  )
+  p <- emapplot(ego_res, showCategory = 30)
 
-  ggsave(
-    file.path(graphics_dir,
-              paste0(cl_name,"_emap.png")),
-    width = 8,
-    height = 6
-  )
-}
-
-p <- dotplot(
-  ego_res,
-  x = "Count",
-  color = "p.adjust",
-  showCategory = 15,
-  orderBy = "p.adjust",
-  font.size = 14
-) +
-guides(size = "none") +
-theme_bw()
-
-p <- dotplot(
-  ego_res,
-  x = "Count",
-  color = "p.adjust",
-  showCategory = 15
-) +
-scale_size_continuous(
-  name = "Gene Count"
-)
-
-p <- dotplot(
-  ego_res,
-  x = "Count",
-  color = "p.adjust",
-  size = "Count",
-  showCategory = 15
-)
-```
-
-
-#  CLUSTERING GO ENRICHMENT ANALYSIS
-```{r}
-#------------------------ CLUSTERS ENRICHMENT ------------------------#
-clusters <- sort(unique(clust_df$cluster))
-clust_df$log2FC <- res_COL_Leu[match(clust_df$gene, rownames(res_COL_Leu)),
-                               "log2FoldChange" ]
-
-min_genes <- 5
-
-GO_results <- list()
-GO_sheets <- list()
-
-for(cl in clusters){
-  Clust_genes <- subset(clust_df, cluster == cl)$gene
-
-  cat("Cluster", cl, "Genes:", length(Clust_genes), "\n")
-
-  if(length(Clust_genes) >= min_genes){
-    ego_res <- enrichGO(
-      gene          = Clust_genes,
-      OrgDb         = org.At.tair.db,
-      keyType       = "TAIR",
-      ont           = "BP",
-      pAdjustMethod = "BH",
-      pvalueCutoff  = 0.05,
-      qvalueCutoff  = 0.05)
-
-    # Remove redundant terms
-    if(nrow(as.data.frame(ego_res)) > 0){
-      ego_res <- simplify(ego_res, cutoff = 0.7, by = "p.adjust", select_fun = min)
-
-      # Calculate term similarity matrix
-      ego_res <- pairwise_termsim(ego_res)
-      emapplot(ego_res, showCategory = 30)
-      
-      go_df <- as.data.frame(ego_res)
-      cat("GO terms after simplification:", nrow(go_df), "\n" )
-
-      GO_results[[paste0("Cluster", cl)]] <- ego_res
-      GO_sheets[[paste0("Cluster_", cl)]] <- go_df
-    }
+  ggsave(file.path(graphics_dir, paste0(cl_name,"_emap.png")), width = 8, height = 6)
   }
-}
 
-# Save all clusters in one workbook
-#write_xlsx(GO_sheets, path = file.path(tables_dir, "GO_enrichment_clusters.xlsx"))
+p <- dotplot(ego_res, x = "Count", color = "p.adjust", showCategory = 15, orderBy = "p.adjust", font.size = 14) +
+  guides(size = "none") +
+  theme_bw()
 
-#------------------------ GO DOT PLOTS ------------------------#
-go_plot_dir <- file.path(graphics_dir, "GO_dotplots")
+p <- dotplot(ego_res, x = "Count", color = "p.adjust", showCategory = 15) +
+  scale_size_continuous(name = "Gene Count")
 
-for(cl_name in names(GO_results)) {
-  ego_res <- GO_results[[cl_name]]
-  
-  if(nrow(as.data.frame(ego_res)) == 0) {
-    cat(cl_name, ": No significant GO terms\n") 
-    next
-    }
-
-p <- dotplot(ego_res, x = "Count", color = "p.adjust", size = "Count", orderBy = "p.adjust", showCategory = 15, font.size = 14) +
-  ggtitle(paste("GO Enrichment -", cl_name)) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-
-#ggsave(filename = file.path(graphics_dir, paste0(cl_name, "_GO_dotplot.png")), plot = p, width = 6, height = 6, dpi = 300)
-#cat(cl_name, ": Dotplot saved\n")
-}
-
-gene_clusters <- split(cluster_df$gene, cluster_df$cluster)
-
-cc <- compareCluster(
-  geneCluster = gene_clusters,
-  fun = "enrichGO",
-  OrgDb = org.At.tair.db,
-  keyType = "TAIR",
-  ont = "BP"
-)
-
-dotplot(cc)
-heatplot(cc)
+p <- dotplot(ego_res, x = "Count", color = "p.adjust", size = "Count",
+  showCategory = 15)
 ```
+
 
 ```{r}
 #------------------------ GSEA ENRICHMENT ------------------------#
@@ -1321,13 +1084,13 @@ gsea_df <- as.data.frame(gsea_BP)
 
 head(gsea_df)
 
-write_xlsx(
-  gsea_df,
-  file.path(
-    tables_dir,
-    "GSEA_BP_results.xlsx"
-  )
-)
+#write_xlsx(
+#  gsea_df,
+#  file.path(
+#    tables_dir,
+#    "GSEA_BP_results.xlsx"
+#  )
+#)
 gsea_BP <- pairwise_termsim(gsea_BP)
 GSEA_dot <- dotplot(
   gsea_BP,
@@ -1337,47 +1100,47 @@ GSEA_dot <- dotplot(
   facet_grid(. ~ .sign) +
   theme_bw()
 
-ggsave(
-  file.path(
-    graphics_dir,
-    "GSEA_dotplot.png"
-  ),
-  GSEA_dot,
-  width = 12,
-  height = 8,
-  dpi = 300
-)
+#ggsave(
+#  file.path(
+#    graphics_dir,
+#    "GSEA_dotplot.png"
+#  ),
+#  GSEA_dot,
+#  width = 12,
+#  height = 8,
+#  dpi = 300
+#)
 GSEA_emap <- emapplot(
   gsea_BP,
   showCategory = 30
 )
 
-ggsave(
-  file.path(
-    graphics_dir,
-    "GSEA_emapplot.png"
-  ),
-  GSEA_emap,
-  width = 12,
-  height = 10,
-  dpi = 300
-)
+#ggsave(
+#  file.path(
+#    graphics_dir,
+#    "GSEA_emapplot.png"
+#  ),
+#  GSEA_emap,
+#  width = 12,
+#  height = 10,
+#  dpi = 300
+#)
 
 GSEA_ridge <- ridgeplot(
   gsea_BP,
   showCategory = 20
 )
 
-ggsave(
-  file.path(
-    graphics_dir,
-    "GSEA_ridgeplot.png"
-  ),
-  GSEA_ridge,
-  width = 12,
-  height = 10,
-  dpi = 300
-)
+#ggsave(
+#  file.path(
+#    graphics_dir,
+#    "GSEA_ridgeplot.png"
+#  ),
+#  GSEA_ridge,
+#  width = 12,
+#  height = 10,
+#  dpi = 300
+#)
 
 gseaplot2(gsea_BP,
   geneSetID = 1,
@@ -1389,7 +1152,6 @@ gseaplot2(gsea_BP, geneSetID = "GO:0009733")
 
 ```{r}
 #------------------------ VENNDIAGRAM ------------------------#
-
 library(ggpubr)
 library(ggVennDiagram)
 
@@ -1414,234 +1176,369 @@ V1 <- ggVennDiagram(venn_list, label_alpha = 0) +
 
 ```{r}
 #------------------------ DIVERGENT RESPONSES COL & LEU ------------------------#
-# COMPARE COL AND abi5 LEU RESPONSES
+# BUILD COMPARISON TABLE 
 COL <- as.data.frame(res_COL_Leu)
-abi5 <- as.data.frame(res_abi5_7_Leu)
+abi5 <- as.data.frame(res_abi5_Leu)
 
 COL$gene <- rownames(COL)
 abi5$gene <- rownames(abi5)
 
-compare_df <- merge(COL,
-                    abi5,
-                    by = "gene", 
-                    suffixes = c("_COL", "_abi5"))
+compare_all <- merge(COL, abi5, by = "gene", suffixes = c("_COL", "_abi5"))
 
-compare_df <- compare_df[complete.cases(
-  compare_df$log2FoldChange_COL,
-  compare_df$log2FoldChange_abi5),  ]
+compare_all <- compare_all %>%
+  filter( !is.na(log2FoldChange_COL), 
+          !is.na(log2FoldChange_abi5) )
 
-# CORRELATION OF TRANSCRIPTIONAL RESPONSES
+# ADD CLUSTER INFO       #
+compare_df <- compare_all %>%
+  left_join( clust_df[, c("gene", "cluster")], by = "gene" )
+
+# RESPONSE DIFFERENCES   #
+compare_df <- compare_df %>%
+  mutate(deltaFC = log2FoldChange_abi5 - log2FoldChange_COL,
+         Divergent = !is.na(cluster) &
+           abs(deltaFC) >= 1.5 &
+           (padj_COL < 0.05 | padj_abi5 < 0.05),
+         Opposite = !is.na(cluster) &
+           sign(log2FoldChange_COL) !=
+           sign(log2FoldChange_abi5) &
+           (padj_COL < 0.05 | padj_abi5 < 0.05) )
+
+# CORRELATION
 cor_val <- cor(compare_df$log2FoldChange_COL,
                compare_df$log2FoldChange_abi5,
                use = "complete.obs")
-cat("Correlation =", round(cor_val,3), "\n")
+cat("Correlation =", round(cor_val, 3), "\n")
 
-p_cor <- ggplot(compare_df,
-                aes(log2FoldChange_COL,
-                    log2FoldChange_abi5)) +
-  geom_point(alpha = 0.2) +
-  geom_smooth(method = "lm", color = "red") +
-  stat_cor() +
-  theme_bw() +
-  labs(title = paste0("COL vs abi5 LEU response (r = ",
-                      round(cor_val, 3), ")" ),
-       x = "COL LEU vs GM log2FC",
-       y = "abi5 LEU vs GM log2FC")
+# DIVERGENT GENES
+divergent_genes <- compare_df %>%
+  filter(Divergent) %>%
+  arrange(desc(abs(deltaFC)))
 
-#ggsave(file.path(graphics_dir, "COL_vs_abi5_correlation.png"), p_cor, width = 8, height = 6)
+# OPPOSITE RESPONSE
+opposite_response <- compare_df %>%
+  filter(Opposite) %>%
+  arrange(desc(abs(deltaFC)))
+cat("Opposite response genes:", nrow(opposite_response), "\n")
 
+# CLUSTER SUMMARY        
+cluster_summary <- divergent_genes %>%
+  group_by(cluster) %>%
+  summarise( n_genes = n(),
+             mean_deltaFC = mean(abs(deltaFC)) ) %>%
+  arrange(desc(n_genes))
+cluster_summary
 
-# RESPONSE DIFFERENCE
-compare_df$deltaFC <- compare_df$log2FoldChange_abi5 - compare_df$log2FoldChange_COL
-compare_df <- compare_df[order(abs(compare_df$deltaFC), decreasing = TRUE ), ]
+# SCATTERPLOT
+top_labels <- divergent_genes %>%
+  slice_max(order_by = abs(deltaFC), n = 20)
 
-# largest differences
-top_diff <- compare_df %>%
-  select(gene,
-         log2FoldChange_COL,
-         log2FoldChange_abi5,
-         deltaFC,
-         padj_COL,
-         padj_abi5)
-#write_xlsx(list(Top_Differences = top_diff), file.path( tables_dir, "COL_vs_abi5_deltaFC.xlsx"))
+p_compare <- ggplot() +
+  # all genes
+  geom_point(data = compare_df,
+             aes(x = log2FoldChange_COL,
+                 y = log2FoldChange_abi5),
+             color = "grey80",
+             alpha = 0.25,
+             size = 1 ) +
 
-# SHARED DE GENES
-sig_COL <- rownames(subset(res_COL_Leu, padj < 0.05) )
-sig_abi5 <- rownames(subset(res_abi5_7_Leu, padj < 0.05) )
-
-shared_genes <- intersect(sig_COL, sig_abi5)
-
-COL_only <- setdiff(sig_COL, sig_abi5)
-abi5_only <- setdiff(sig_abi5, sig_COL)
-
-cat("Shared:", length(shared_genes), "\n")
-cat("COL only:", length(COL_only), "\n")
-cat("abi5 only:", length(abi5_only), "\n")
-#write_xlsx(list(Shared = data.frame(gene = shared_genes), COL_only = data.frame(gene = COL_only), abi5_only = data.frame(gene = abi5_only)), file.path(tables_dir, "Shared_and_Unique_DEGs.xlsx" ))
-
-# GSEA
-COL_rank <- res_COL_Leu$log2FoldChange
-names(COL_rank) <- rownames(res_COL_Leu)
-
-COL_rank <- COL_rank[!is.na(COL_rank)]
-COL_rank <- sort(COL_rank, decreasing = TRUE)
-
-abi5_rank <- res_abi5_7_Leu$log2FoldChange
-names(abi5_rank) <- rownames(res_abi5_7_Leu)
-
-abi5_rank <- abi5_rank[!is.na(abi5_rank)]
-abi5_rank <- sort(abi5_rank, decreasing = TRUE)
-
-gsea_COL <- gseGO(geneList = COL_rank,
-                  OrgDb = org.At.tair.db,
-                  keyType = "TAIR",
-                  ont = "BP",
-                  minGSSize = 10,
-                  maxGSSize = 500,
-                  pvalueCutoff = 0.05,
-                  verbose = FALSE)
-
-gsea_abi5 <- gseGO(geneList = abi5_rank,
-                   OrgDb = org.At.tair.db,
-                   keyType = "TAIR",
-                   ont = "BP",
-                   minGSSize = 10,
-                   maxGSSize = 500,
-                   pvalueCutoff = 0.05,
-                   verbose = FALSE)
-
-# COMPARE NES VALUES
-COL_gsea <- as.data.frame(gsea_COL)
-abi5_gsea <- as.data.frame(gsea_abi5)
-
-gsea_compare <- merge(COL_gsea[,c("ID","Description","NES")],
-                      abi5_gsea[,c("ID","NES")],
-                      by = "ID",
-                      suffixes = c("_COL","_abi5"))
-
-gsea_compare$deltaNES <- gsea_compare$NES_abi5 - gsea_compare$NES_COL
-gsea_compare <- gsea_compare[order(abs(gsea_compare$deltaNES), decreasing = TRUE ), ]
-
-#write_xlsx(list(GSEA_NES_Comparison = gsea_compare), file.path(tables_dir, "COL_vs_abi5_GSEA.xlsx"))
-
-# NES COMPARISON PLOT
-p_nes <- ggplot(gsea_compare, aes(NES_COL, NES_abi5)) +
-  geom_point(alpha = 0.6) +
-  geom_abline(slope = 1,
-              intercept = 0,
-              color = "red") +
-  theme_bw() +
-  labs(title = "GSEA pathway comparison", x = "COL NES", y = "abi5 NES")
-
-#ggsave(file.path(graphics_dir, "COL_vs_abi5_GSEA_NES.png"), p_nes, width = 8,  height = 6)
-
-# CANDIDATE GENES
-candidate_genes <- subset(compare_df, abs(deltaFC) > 1.5 &
-                            padj_COL < 0.05 &
-                            padj_abi5 < 0.05)
-
-#write_xlsx(list(Candidate_Genes = candidate_genes), file.path(tables_dir, "COL_vs_abi5_candidate_genes.xlsx"))
-cat("Candidate genes:", nrow(candidate_genes), "\n")
-
-
-COL <- as.data.frame(res_COL_Leu)
-abi5 <- as.data.frame(res_abi5_7_Leu)
-
-COL$gene <- rownames(COL)
-abi5$gene <- rownames(abi5)
-
-compare_df <- merge(COL, abi5, by = "gene", suffixes = c("_COL", "_abi5"))
-
-compare_df$deltaFC <- compare_df$log2FoldChange_abi5 - compare_df$log2FoldChange_COL
-
-shared_sig <- subset(compare_df, 
-                     padj_COL < 0.05 &
-                       padj_abi5 < 0.05)
-
-divergent_genes <- subset(shared_sig, abs(deltaFC) >= 1.5)
-divergent_genes <- divergent_genes[order(abs(divergent_genes$deltaFC), decreasing = TRUE), ]
-
-head(divergent_genes[ ,
-                     c("gene",
-                       "log2FoldChange_COL",
-                       "log2FoldChange_abi5",
-                       "deltaFC") ], 20 )
-
-compare_df$Divergent <- abs(compare_df$deltaFC) >= 1.5 &
-  compare_df$padj_COL < 0.05 &
-  compare_df$padj_abi5 < 0.05
-
-top_labels <- head(compare_df[order(abs(compare_df$deltaFC), decreasing = TRUE), ], 20 )
-
-p <- ggplot(compare_df, 
-            aes(log2FoldChange_COL, log2FoldChange_abi5)) +
-  geom_point(color = "grey70", alpha = 0.4) +
-  geom_point(data = subset(compare_df, Divergent), color = "red", size = 2) +
+  # clustered divergent genes
+  geom_point(data = divergent_genes,
+             aes(x = log2FoldChange_COL,
+                 y = log2FoldChange_abi5,
+                 color = factor(cluster) ),
+             size = 2.5) +
   geom_abline(slope = 1, intercept = 0, linetype = 2) +
-  geom_text_repel(data = top_labels, aes(label = gene), size = 3) +
+
+  geom_text_repel(data = top_labels,
+                  aes(x = log2FoldChange_COL,
+                      y = log2FoldChange_abi5,
+                      label = gene ),
+                  size = 3) +
   theme_bw() +
-  labs(title = "COL vs abi5 LEU response",
+  labs(title = paste0("COL vs abi5 Leucine Response (r = ",
+                      round(cor_val, 3), ")" ),
        x = "COL log2FC",
-       y = "abi5 log2FC")
+       y = "abi5 log2FC",
+       color = "Cluster" )
+p_compare
 
-#ggsave(file.path(graphics_dir, "COL_abi5_divergent_genes.png"), p, width = 8, height = 6, dpi = 300)
-#write_xlsx(list( Divergent_Genes = divergent_genes ), file.path(tables_dir, "COL_abi5_divergent_genes.xlsx" ))
-
-
-abi5_higher <- subset(divergent_genes, deltaFC > 1.5)$gene
-COL_higher <- subset(divergent_genes, deltaFC < -1.5)$gene
-
-ego_abi5 <- enrichGO(gene = abi5_higher,
-                     OrgDb = org.At.tair.db,
-                     keyType = "TAIR",
-                     ont = "BP")
-
-ego_COL <- enrichGO(gene = COL_higher,
-                    OrgDb = org.At.tair.db,
-                    keyType = "TAIR",
-                    ont = "BP")
-
-s_ego_abi <- simplify(ego_abi5)
-s_ego_col <- simplify(ego_COL)
-
-s_ego_abi<-pairwise_termsim(s_ego_abi)
-s_ego_col<-pairwise_termsim(s_ego_col)
-
-dotplot(s_ego_abi)
-dotplot(s_ego_col)
+#ggsave(file.path( graphics_dir, "COL_abi5_divergent_genes.png"),
+#        p_compare,
+#        width = 8,
+#        height = 6,
+#        dpi = 300)
 ```
 
 
 ```{r}
-#how much overlap
-col_genes <- rownames(subset(as.data.frame(res_COL_Leu),
-                             padj < 0.05 &
-                             abs(log2FoldChange) > 1.5))
+# FOCUS ON CLUSTER 1 #
+cluster1_div <- divergent_genes %>%
+filter(cluster == 1) %>%
+arrange(desc(abs(deltaFC)))
 
-abi_genes <- rownames(subset(as.data.frame(res_abi5_7_Leu),
-                             padj < 0.05 &
-                             abs(log2FoldChange) > 1.5))
+cat("Cluster 1 divergent genes:", nrow(cluster1_div),"\n")
 
-length(intersect(col_genes, abi_genes))
-length(setdiff(col_genes, abi_genes))
-length(setdiff(abi_genes, col_genes))
+# ANNOTATE GENES #
+cluster1_annot <- AnnotationDbi::select(org.At.tair.db,
+                                        keys = cluster1_div$gene,
+                                        keytype = "TAIR",
+                                        columns = c("TAIR",
+                                                    "SYMBOL",
+                                                    "GENENAME")
+                                        )
 
-gm_genes <- rownames(subset(as.data.frame(res_abi5_7_vs_COL_GM),
-                            padj < 0.05 &
-                            abs(log2FoldChange) > 1.5))
+cluster1_results <- cluster1_div %>%
+  left_join(cluster1_annot, by = c("gene" = "TAIR")) %>%
+  arrange(desc(abs(deltaFC)))
 
-leu_genes <- rownames(subset(as.data.frame(res_abi5_7_vs_COL_Leu),
-                             padj < 0.05 &
-                             abs(log2FoldChange) > 1.5))
+cluster1_results %>%
+  select(gene,
+         SYMBOL,
+         GENENAME,
+         log2FoldChange_COL,
+         log2FoldChange_abi5,
+         deltaFC,
+         padj_COL,
+         padj_abi5) %>%
+  head(50)
 
-intersect(gm_genes, leu_genes)
+# CLUSTER 1 HEATMAP #
+cluster1_genes <- cluster1_results$gene
 
-head(
-  as.data.frame(res_abi5_interaction)[
-    order(abs(res_abi5_interaction$log2FoldChange),
-          decreasing = TRUE),
-  ], 50)
+hm_cluster1 <- hm_avg[rownames(hm_avg) %in% cluster1_genes, ]
 
+ann_genotype <- data.frame(genotype = c( "COL", "abi5-7", "log2-2"))
+
+rownames(ann_genotype) <- c("COL", "abi5-7", "log2-2")
+
+clust1_hm <- pheatmap(hm_cluster1, scale = "row", cluster_rows = TRUE, cluster_cols = FALSE, annotation_col = ann_genotype)
+ ggsave(
+   file.path(
+     graphics_dir,
+     "COL_abi5_divergent_hm.png"),
+   clust1_hm,
+   width = 8,
+   height = 8,
+   dpi = 300
+ )
+
+# ABI5-LIKE CANDIDATES #
+cluster1_results %>% filter(
+  grepl( "ABI|EM|LEA|DOG|OLE|CRU|CRA|RAB",
+         SYMBOL,
+         ignore.case = TRUE)) %>%
+   select(gene,
+          SYMBOL,
+          GENENAME,
+          deltaFC)
+
+# SAVE RESULTS #
+# write.csv(
+# cluster1_results,
+# file.path(
+# tables_dir,
+# "Cluster1_Divergent_Genes.csv"
+# ),
+# row.names = FALSE
+# )
+```
+
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(ggrepel)
+library(clusterProfiler)
+library(org.At.tair.db)
+library(AnnotationDbi)
+
+
+head(opposite_response %>%
+    select( gene,
+            cluster,
+            log2FoldChange_COL,
+            log2FoldChange_abi5,
+            deltaFC ), 50 )
+ann_genotype <- data.frame(genotype = c("COL", "abi5-7", "log2-2"))
+
+rownames(ann_genotype) <- c("COL", "abi5-7", "log2-2")
+
+pheatmap( hm_cluster1,
+          scale = "row",
+          cluster_rows = TRUE,
+          cluster_cols = FALSE,
+          annotation_col = ann_genotype)
+
+opposite_response %>%
+  group_by(cluster) %>%
+  summarise(n_genes = n(), mean_deltaFC = mean(abs(deltaFC)) ) %>%
+  arrange(desc(n_genes))
+
+divergent_genes %>%
+  group_by(cluster) %>%
+  summarise( n_genes = n(),
+             mean_deltaFC = mean(abs(deltaFC))) %>%
+  arrange(desc(n_genes))
+
+cluster1_opposite <- opposite_response %>%
+  filter(cluster == 1) %>%
+  arrange(desc(abs(deltaFC)))
+
+head(cluster1_opposite %>%
+       select(gene,
+              log2FoldChange_COL,
+              log2FoldChange_abi5,
+              deltaFC ), 50 )
+
+cluster5_opposite <- opposite_response %>%
+  filter(cluster == 5) %>%
+  arrange(desc(abs(deltaFC)))
+
+head(cluster5_opposite %>%
+       select(gene,
+              log2FoldChange_COL,
+              log2FoldChange_abi5,
+              deltaFC), 50 )
+
+ggplot(opposite_response,
+       aes(x = factor(cluster),
+           fill = factor(cluster))) +
+  geom_bar() +
+  theme_bw() +
+  labs( x = "Cluster",
+        y = "Number of opposite-response genes",
+        title = "Opposite leucine responses between COL and abi5")
+
+cluster1_div <- divergent_genes %>%
+  filter(cluster == 1) %>%
+  arrange(desc(abs(deltaFC)))
+
+cluster1_div %>%
+  select( gene,
+          log2FoldChange_COL,
+          log2FoldChange_abi5,
+          deltaFC,
+          padj_COL,
+          padj_abi5) %>%
+  head(50)
+
+cluster1_genes <- cluster1_div$gene
+
+hm_cluster1 <- hm_avg[rownames(hm_avg) %in% cluster1_genes, ]
+annotation_col = ann
+
+cluster1_COL <- cluster1_div %>%
+  filter(deltaFC < 0) %>%
+  arrange(deltaFC)
+cluster1_abi5 <- cluster1_div %>%
+  filter(deltaFC > 0) %>%
+  arrange(desc(deltaFC))
+
+ego_cluster1_COL <- enrichGO(gene = cluster1_COL$gene,
+                             OrgDb = org.At.tair.db,
+                             keyType = "TAIR",
+                             ont = "BP")
+
+ego_cluster1_abi5 <- enrichGO(gene = cluster1_abi5$gene,
+                              OrgDb = org.At.tair.db,
+                              keyType = "TAIR",
+                              ont = "BP")
+
+#write.csv(cluster1_div, "Cluster1_divergent_genes.csv", row.names = FALSE)
+
+cluster1_annot <- AnnotationDbi::select(org.At.tair.db,
+                                        keys = cluster1_div$gene,
+                                        keytype = "TAIR",
+                                        columns = c( "TAIR", 
+                                                     "SYMBOL",
+                                                     "GENENAME"))
+
+cluster1_results <- cluster1_div %>%
+  left_join(cluster1_annot, by = c("gene" = "TAIR")) %>%
+  arrange(desc(abs(deltaFC)))
+
+cluster1_results %>%
+  select(gene,
+         SYMBOL,
+         GENENAME,
+         log2FoldChange_COL,
+         log2FoldChange_abi5,
+         deltaFC) %>%
+  head(50)
+
+ggplot(cluster1_div,
+       aes(log2FoldChange_COL,
+           log2FoldChange_abi5)) +
+  geom_point() +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  theme_bw()
+```
+
+```{r}
+# CLUSTER 5 ONLY         #
+
+cluster5_div <- divergent_genes %>%
+  filter(cluster == 5) %>%
+  arrange(desc(abs(deltaFC)))
+
+cat("Cluster 5 divergent genes:", nrow(cluster5_div),  "\n")
+
+
+# ANNOTATE GENES         #
+cluster5_annot <- AnnotationDbi::select(
+  org.At.tair.db,
+  keys = cluster5_div$gene,
+  keytype = "TAIR",
+  columns = c( "TAIR", "SYMBOL", "GENENAME" ) )
+
+cluster5_results <- cluster5_div %>%
+  left_join(cluster5_annot,
+            by = c("gene" = "TAIR")) %>%
+  arrange(desc(abs(deltaFC)))
+
+cluster5_results %>%
+  select(gene,
+         SYMBOL,
+         GENENAME,
+         log2FoldChange_COL,
+         log2FoldChange_abi5,
+         deltaFC,
+         padj_COL,
+         padj_abi5 ) %>%
+  head(50)
+
+
+# CLUSTER 5 HEATMAP      #
+cluster5_genes <- cluster5_results$gene
+
+hm_cluster5 <- hm_avg[rownames(hm_avg) %in% cluster5_genes, ]
+
+ann_genotype <- data.frame(
+  genotype = c("COL", "abi5-7", "log2-2"))
+
+rownames(ann_genotype) <- c("COL", "abi5-7", "log2-2")
+
+hm_clust5_abivscol <- pheatmap( hm_cluster5, scale = "row", cluster_rows = TRUE, cluster_cols = FALSE, annotation_col = ann_genotype)
+
+#ggsave(file.path(graphics_dir, "COL_abi5_divergent_hm5.png"), hm_clust5_abivscol, width = 12, height = 10, dpi = 300)
+
+# OPPOSITE RESPONSE CLUSTERED ONLY 
+opposite_response %>%
+  group_by(cluster) %>%
+  summarise(n_genes = n(), mean_deltaFC = mean(abs(deltaFC)) ) %>%
+  arrange(desc(n_genes))
+
+
+# SAVE CANDIDATES        #
+# write.csv(
+#   cluster1_results,
+#   file.path(
+#     tables_dir,
+#     "Cluster1_Divergent_Genes.csv"
+#   ),
+#   row.names = FALSE
+# )
 ```
 
 ```{r}
