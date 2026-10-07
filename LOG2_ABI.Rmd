@@ -184,7 +184,7 @@ stopifnot(all(rownames(sample_info) == colnames(read.count))) # Safety check
 ```{r THRESHOLDS}
 #------------------------ Set Values: P.VAL, LFC ------------------------#
 pad        <- 0.05
-lfc_thresh <- 1.0
+lfc_thresh <- 1.5
 
 #------------------------ COLORS ------------------------#
 colors <- c("COL" = "#32BECC",   # blue curacao
@@ -308,7 +308,7 @@ p_dend
 #------------------------ SAVE ------------------------#
 #ggsave(file.path(graphics_dir,"Distance_tree.png"), p_dend, width = 8, height = 6 )
 ```
-# 10. SAMPLE HEATMAP
+# 10. SAMPLE DISTANCE HEATMAP
 ```{r}
 sample_dist <- dist(t(assay(vsd)))
 sampleDistMatrix <- as.matrix(sample_dist)
@@ -345,14 +345,10 @@ s2s <- pheatmap(sampleDistMatrix,
 condition_contrast <- function(dds, g1, t1, g0, t0) {
   X1 <- model.matrix(design(dds), 
                      data.frame(genotype = factor(g1, levels = levels(colData(dds)$genotype)),
-                                treatment = factor(t1, levels = levels(colData(dds)$treatment))
-                                )
-                     )
+                                treatment = factor(t1, levels = levels(colData(dds)$treatment))))
   X0 <- model.matrix(design(dds),
                      data.frame(genotype = factor(g0, levels = levels(colData(dds)$genotype)),
-                                treatment = factor(t0, levels = levels(colData(dds)$treatment))
-                                )
-                     )
+                                treatment = factor(t0, levels = levels(colData(dds)$treatment))))
 as.numeric(X1 - X0)
 }
 
@@ -361,12 +357,10 @@ as.numeric(X1 - X0)
 condition_contrast <- function(dds, g1, t1, g0, t0) {
   X1 <- model.matrix(design(dds),
                      data.frame(genotype  = factor(g1, levels = levels(colData(dds)$genotype)),
-                                treatment = factor(t1, levels = levels(colData(dds)$treatment)))
-                     )
+                                treatment = factor(t1, levels = levels(colData(dds)$treatment))))
   X0 <- model.matrix(design(dds),
                      data.frame(genotype  = factor(g0, levels = levels(colData(dds)$genotype)),
-                                treatment = factor(t0, levels = levels(colData(dds)$treatment)))
-                     )
+                                treatment = factor(t0, levels = levels(colData(dds)$treatment))))
   as.numeric(X1 - X0)
 }
 
@@ -380,16 +374,14 @@ run_result <- function(contrast = NULL, coef = NULL) {
 
 #------------------------ GENOTYPE RESPONSES ------------------------#
 # A. Leu response within each genotype: genes responding to amino-acid exposure
-res_COL_Leu <- run_result(contrast = condition_contrast(dds,
-                                                        "COL", "LEU", "COL", "GM"))
-res_log2_Leu <- run_result(contrast = condition_contrast(dds, 
-                                                         "log2-2", "LEU", "log2-2", "GM"))
-res_abi5_Leu <- run_result(contrast = condition_contrast(dds, 
-                                                         "abi5-7", "LEU", "abi5-7", "GM"))
-#------------------------ GENOTYPExLEU INTERACTION ------------------------#
-# D. These test whether the transcriptional response to LEU differs from COL.
-res_log2_interaction <- run_result(coef = "genotypelog2.2.treatmentLEU")
-res_abi5_interaction <- run_result(coef = "genotypeabi5.7.treatmentLEU")
+res_COL_Leu <- run_result(contrast = condition_contrast(dds, "COL", "LEU", "COL", "GM"))
+res_log2_Leu <- run_result(contrast = condition_contrast(dds, "log2-2", "LEU", "log2-2", "GM"))
+res_abi5_Leu <- run_result(contrast = condition_contrast(dds, "abi5-7", "LEU", "abi5-7", "GM"))
+
+#------------------------ GENOTYPE DIFFERENCES ON LEU ------------------------#
+res_abi5_vs_COL_LEU <- run_result(contrast = condition_contrast(dds,"abi5-7", "LEU", "COL", "LEU"))
+res_log2_vs_COL_LEU <- run_result(contrast = condition_contrast(dds, "log2-2", "LEU", "COL", "LEU"))
+res_log2_vs_abi5_LEU <- run_result(contrast = condition_contrast(dds, "log2-2", "LEU", "abi5-7", "LEU"))
 ```
 # other CONTRAST TESTING
 ```{r BIOLOGICAL TESTING}
@@ -503,8 +495,8 @@ for(gene in candidate_genes){
 
 #ggsave(file.path(graphics_dir, paste0(gene, "_expression.pdf")), p, width = 6, height = 5 ) }
 ```
-#  HEATMAP ALL
-```{r}
+#  COMPLETE HEATMAP ALL
+```{r Heatmap ALL}
 #------------------------ HEATMAP HELPERS ------------------------#
 ann_col <- as.data.frame(colData(dds)[ , c("genotype", "treatment")]) # annotations
 
@@ -558,9 +550,7 @@ plot_LEU_only_heatmap <- function(res, expr_mat, annotation_col, title) {
   }
 
   keep <- annotation_col$treatment == "LEU"
-
   hm <- prepare_heatmap_matrix(expr_mat[ , keep], genes)
-
   pheatmap(hm,
            annotation_col = annotation_col[keep, ],
            show_rownames = FALSE,
@@ -573,13 +563,14 @@ H1_1 <- plot_LEU_only_heatmap(res_COL_Leu, mat, ann_col, "COL-responsive genes (
 H2_1 <- plot_LEU_only_heatmap(res_log2_Leu, mat, ann_col, "log2-2 responsive genes (LEU samples)")
 H3_1 <- plot_LEU_only_heatmap(res_abi5_Leu, mat, ann_col, "abi5-7 responsive genes (LEU samples)")
 ```
-# 18. K MEANS CLUSTERING PLOTS
+
+# 18. K MEANS CLUSTERING - LEU ONLY
 ```{r K Means Clustering Plot}
 #------------------------ KMEANS ------------------------#
 # Elbow Method + Silhouette Analysis
 genes <- get_sig_genes(res_COL_Leu) # Significant genes
-keep <- ann_col$treatment == "LEU" # LEU samples only
-hm <- prepare_heatmap_matrix(mat[ , keep], genes)
+keep  <- ann_col$treatment == "LEU" # LEU samples only
+hm    <- prepare_heatmap_matrix(mat[ , keep], genes)
 
 ann_sub <- ann_col[keep, ]
 cat("Genes retained:", nrow(hm), "\n")
@@ -595,11 +586,9 @@ for(i in seq_along(k_range)) {
   k <- k_range[i]
   km <- kmeans(hm, centers = k, nstart = 50)
 
-  # Elbow Method
-  wcss[i] <- km$tot.withinss
+  wcss[i] <- km$tot.withinss  # Elbow Method
 
-  # Silhouette Method
-  sil <- silhouette(km$cluster, dist(hm))
+  sil <- silhouette(km$cluster, dist(hm))  # Silhouette Method
   silhouette_avg[i] <- mean(sil[, 3])
 }
 
@@ -613,8 +602,7 @@ elbow_plot <- ggplot(data.frame(k = k_range, WCSS = wcss), aes(k, WCSS)) +
        y = "Within-Cluster Sum of Squares")
 
 # Silhouette Plot
-sil_plot <- ggplot(data.frame(k = k_range, silhouette = silhouette_avg),
-                   aes(k, silhouette)) +
+sil_plot <- ggplot(data.frame(k = k_range, silhouette = silhouette_avg), aes(k, silhouette)) +
   geom_line(linewidth = 1) +
   geom_point(size = 3) +
   theme_bw() +
@@ -623,19 +611,15 @@ sil_plot <- ggplot(data.frame(k = k_range, silhouette = silhouette_avg),
        y = "Average Silhouette Width")
 
 # Display plots side-by-side
-grid.arrange(elbow_plot, 
-             sil_plot,
-             ncol = 2)
+grid.arrange(elbow_plot,sil_plot, ncol = 2)
 #ggsave( file.path(graphics_dir,"01_1_Kmeans.png"), sidebyside, width = 10, height = 8)
 
 # Recommended k from silhouette
 best_k <- k_range[which.max(silhouette_avg)]
-
 cat("\nOptimal k based on silhouette score =", best_k, "\n")
 
 # Run final k-means
 km_final <- kmeans(hm, centers = best_k, nstart = 100)
-table(km_final$cluster)
 
 # K-means heatmap
 H_kmeans <- pheatmap(hm, 
@@ -651,30 +635,18 @@ H_kmeans <- pheatmap(hm,
                      main = paste0("LEU-responsive genes (k = ", best_k, ")")
                      )
 
-
 #ggsave( file.path(graphics_dir,"01_1_Kmeans_k2.png"), H_kmeans, width = 10, height = 8)
 
 # Export cluster 
- cluster_df <- data.frame(gene = rownames(hm), cluster = km_final$cluster)
- head(cluster_df)
+ cluster_df <- data.frame(gene = rownames(hm), cluster = km_final$cluster) # k = 2 
 
-# write.csv(
-#   cluster_df,
- #  file.path(tables_dir,
-#             "LEU_gene_clusters.csv"),
-#   row.names = FALSE)
-
-#  for(k in 2:8){
-#  km <- kmeans(hm, centers = k,nstart = 50)
-#  cat("\nK =", k, "\n")
-#  print(table(km$cluster))
-#  }
+# write.csv(cluster_df, file.path(tables_dir, "LEU_gene_clusters.csv"), row.names = FALSE)
   
 plot(k_range, silhouette_avg, type = "b", pch = 19)
 ```
 
 # 19. LEU CLUSTERING HEATMAPS
-```{r}
+```{r Optimal K used is 5}
 #------------------------ RUN KMEANS HEATMAP ------------------------#
 plot_LEU_kmeans_heatmap <- function(res,
                                     expr_mat,
@@ -684,7 +656,7 @@ plot_LEU_kmeans_heatmap <- function(res,
                                     lfc_cutoff = 1.5,
                                     k = 5) {
   # Significant genes
-  sig <- subset(as.data.frame(res),
+  sig <- subset(as.data.frame(res), 
                 !is.na(padj) &
                   padj < padj_cutoff &
                   abs(log2FoldChange) > lfc_cutoff)
@@ -904,77 +876,6 @@ p_go
 #ggsave(file.path(graphics_dir, "GO_clusters_faceted.png"), p_go, width = 12, height = 10, dpi = 300)
 ```
 
-```{r}
-library(dplyr)
-library(tidyr)
-library(ggplot2)
-
-hm_avg <- H1_2$hm_avg
-km <- H1_2$kmeans
-
-cluster_means <- hm %>%
-  as.data.frame() %>%
-  mutate(
-    Cluster = factor(km$cluster)
-  ) %>%
-  group_by(Cluster) %>%
-  summarise(
-    across(everything(), mean),
-    .groups = "drop"
-  )
-
-# Convert to long format
-cluster_long <- cluster_means %>%
-  pivot_longer(
-    cols = -Cluster,
-    names_to = "Genotype",
-    values_to = "Mean_Zscore"
-  )
-
-# Plot
-p_clusters <- ggplot(cluster_long,
-                     aes(x = Genotype,
-                         y = Mean_Zscore,
-                         group = Cluster,
-                         color = Cluster)
-                     ) +
-  geom_line(linewidth = 1.2) +
-  geom_point(size = 3) +
-  scale_color_manual(
-    values = c(
-      "#1b9e77",
-      "#d95f02",
-      "#7570b3",
-      "#e7298a",
-      "#66a61e",
-      "blue",
-      "yellow",
-      "red"
-    )
-  ) +
-  labs(
-    title = "Average Expression Profiles of K-means Clusters",
-    x = NULL,
-    y = "Mean Z-score"
-  ) +
-  theme_bw(base_size = 12) +
-  theme(
-    plot.title = element_text(
-      face = "bold",
-      hjust = 0.5
-    ),
-    legend.title = element_blank()
-  )
-p_clusters
-
-#ggsave(
-#  file.path(graphics_dir, "Cluster_expression_profiles.png"),
-#  p_clusters,
-#  width = 7,
-#  height = 5,
-#  dpi = 300
-#)
-```
 
 
 ```{r}
@@ -1029,8 +930,7 @@ lineclust <- ggplot() +
                                    face = "bold",
                                    hjust = 1),
         plot.title = element_text(face = "bold",
-                                  hjust = 0.5)
-        )
+                                  hjust = 0.5))
 
 #ggsave(file.path(graphics_dir, "GO_clusters_line.png"), lineclust, width = 10, height = 8, dpi = 300)
 ```
@@ -1175,8 +1075,10 @@ V1 <- ggVennDiagram(venn_list, label_alpha = 0) +
 
 
 ```{r}
-#------------------------ DIVERGENT RESPONSES COL & LEU ------------------------#
-# BUILD COMPARISON TABLE 
+#------------------------ DIVERGENT RESPONSES COL & ABI LEU ------------------------#
+# Compare the LEU response in COL with the LEU response in abi5.
+
+#------------------------ BUILD COMPARISON TABLE ------------------------#
 COL <- as.data.frame(res_COL_Leu)
 abi5 <- as.data.frame(res_abi5_Leu)
 
@@ -1186,50 +1088,60 @@ abi5$gene <- rownames(abi5)
 compare_all <- merge(COL, abi5, by = "gene", suffixes = c("_COL", "_abi5"))
 
 compare_all <- compare_all %>%
-  filter( !is.na(log2FoldChange_COL), 
-          !is.na(log2FoldChange_abi5) )
+  filter(!is.na(log2FoldChange_COL), 
+         !is.na(log2FoldChange_abi5) )
 
-# ADD CLUSTER INFO       #
+#------------------------ ADD CLUSTER INFO ------------------------#
+# Adds k-means cluster assignments from previous analyses.
 compare_df <- compare_all %>%
-  left_join( clust_df[, c("gene", "cluster")], by = "gene" )
+  left_join( clust_df[ , c("gene", "cluster")], by = "gene" )
 
-# RESPONSE DIFFERENCES   #
-compare_df <- compare_df %>%
-  mutate(deltaFC = log2FoldChange_abi5 - log2FoldChange_COL,
+#------------------------ RESPONSE CLASSIFICATION ------------------------#
+# Define "responding genes" before identifying divergent responses.
+
+compare_df <- compare_df %>% mutate(COL_sig = padj_COL < 0.05 &
+                                      abs(log2FoldChange_COL) > 1.5,
+                                    abi5_sig = padj_abi5 < 0.05 &
+                                      abs(log2FoldChange_abi5) > 1.5,
+                                    deltaFC = log2FoldChange_abi5 - log2FoldChange_COL,
          Divergent = !is.na(cluster) &
            abs(deltaFC) >= 1.5 &
-           (padj_COL < 0.05 | padj_abi5 < 0.05),
+           (COL_sig | abi5_sig),
          Opposite = !is.na(cluster) &
-           sign(log2FoldChange_COL) !=
-           sign(log2FoldChange_abi5) &
-           (padj_COL < 0.05 | padj_abi5 < 0.05) )
+           COL_sig &
+           abi5_sig &
+           sign(log2FoldChange_COL) != sign(log2FoldChange_abi5))
 
-# CORRELATION
+#------------------------ CORRELATION ------------------------#
+# Transcriptome-wide similarity of LEU responses
+
 cor_val <- cor(compare_df$log2FoldChange_COL,
                compare_df$log2FoldChange_abi5,
                use = "complete.obs")
 cat("Correlation =", round(cor_val, 3), "\n")
 
-# DIVERGENT GENES
+#------------------------ EXTRACT GENE SETS ------------------------#
 divergent_genes <- compare_df %>%
   filter(Divergent) %>%
   arrange(desc(abs(deltaFC)))
 
-# OPPOSITE RESPONSE
 opposite_response <- compare_df %>%
   filter(Opposite) %>%
   arrange(desc(abs(deltaFC)))
+cat("Divergent genes:", nrow(divergent_genes), "\n")
 cat("Opposite response genes:", nrow(opposite_response), "\n")
 
-# CLUSTER SUMMARY        
+#------------------------ CLUSTER SUMMARY ------------------------#
+# Which expression clusters contribute most to the genotype-specific LEU response?
+
 cluster_summary <- divergent_genes %>%
   group_by(cluster) %>%
-  summarise( n_genes = n(),
-             mean_deltaFC = mean(abs(deltaFC)) ) %>%
+  summarise(n_genes = n(),
+            mean_deltaFC = mean(abs(deltaFC)),
+            median_deltaFC = median(abs(deltaFC)),
+            .groups = "drop") %>%
   arrange(desc(n_genes))
-cluster_summary
-
-# SCATTERPLOT
+#------------------------ SCATTERPLOT ------------------------#
 top_labels <- divergent_genes %>%
   slice_max(order_by = abs(deltaFC), n = 20)
 
@@ -1242,7 +1154,7 @@ p_compare <- ggplot() +
              alpha = 0.25,
              size = 1 ) +
 
-  # clustered divergent genes
+# highlighted divergent genes
   geom_point(data = divergent_genes,
              aes(x = log2FoldChange_COL,
                  y = log2FoldChange_abi5,
@@ -1256,11 +1168,10 @@ p_compare <- ggplot() +
                       label = gene ),
                   size = 3) +
   theme_bw() +
-  labs(title = paste0("COL vs abi5 Leucine Response (r = ",
-                      round(cor_val, 3), ")" ),
-       x = "COL log2FC",
-       y = "abi5 log2FC",
-       color = "Cluster" )
+labs(title = paste0("COL vs abi5 LEU Response (r = ", round(cor_val, 3), ")" ),
+     x = "COL LEU response log2FC",
+     y = "abi5 LEU response log2FC",
+     color = "Cluster")
 p_compare
 
 #ggsave(file.path( graphics_dir, "COL_abi5_divergent_genes.png"),
@@ -1268,6 +1179,18 @@ p_compare
 #        width = 8,
 #        height = 6,
 #        dpi = 300)
+
+
+#------------------------ GENOTYPE DIFFERENCES ON LEU ------------------------#
+# Purpose:
+# Identify genes whose expression differs between abi5 and COL while both are grown on LEU.
+
+res_abi5_vs_COL_LEU <- run_result(contrast = condition_contrast(dds,
+                                                                "abi5-7", "LEU",
+                                                                "COL", "LEU"))
+
+res_log2_vs_COL_LEU <- run_result(contrast = condition_contrast(dds, "log2-2", "LEU",
+                                                                "COL", "LEU"))
 ```
 
 
@@ -1345,31 +1268,24 @@ cluster1_results %>% filter(
 ```
 
 
-```{r}
-library(dplyr)
-library(ggplot2)
-library(ggrepel)
-library(clusterProfiler)
-library(org.At.tair.db)
+```{r ABI LEUCINE DIVERGENT GENES HEATMAP}
 library(AnnotationDbi)
 
-
-head(opposite_response %>%
-    select( gene,
-            cluster,
-            log2FoldChange_COL,
-            log2FoldChange_abi5,
-            deltaFC ), 50 )
+#------------------------ DIVERGENT RESPONSES ABI ------------------------#
 ann_genotype <- data.frame(genotype = c("COL", "abi5-7", "log2-2"))
-
 rownames(ann_genotype) <- c("COL", "abi5-7", "log2-2")
 
-pheatmap( hm_cluster1,
-          scale = "row",
-          cluster_rows = TRUE,
-          cluster_cols = FALSE,
-          annotation_col = ann_genotype)
+hm_clust1 <- pheatmap(hm_cluster1,
+         scale = "row",
+         cluster_rows = TRUE,
+         cluster_cols = FALSE,
+         angle_col = 45,
+         annotation_col = ann_genotype)
+ggsave(file.path(graphics_dir, "Divergent_hm1.png"), hm_clust1, width = 5, height = 7.5, dpi = 300)
+```
 
+
+```{r ABI LEUCINE DIVERGENT GENES HEATMAP}
 opposite_response %>%
   group_by(cluster) %>%
   summarise(n_genes = n(), mean_deltaFC = mean(abs(deltaFC)) ) %>%
@@ -1477,24 +1393,20 @@ ggplot(cluster1_div,
 
 ```{r}
 # CLUSTER 5 ONLY         #
-
 cluster5_div <- divergent_genes %>%
   filter(cluster == 5) %>%
   arrange(desc(abs(deltaFC)))
 
 cat("Cluster 5 divergent genes:", nrow(cluster5_div),  "\n")
 
-
 # ANNOTATE GENES         #
-cluster5_annot <- AnnotationDbi::select(
-  org.At.tair.db,
-  keys = cluster5_div$gene,
-  keytype = "TAIR",
-  columns = c( "TAIR", "SYMBOL", "GENENAME" ) )
+cluster5_annot <- AnnotationDbi::select(org.At.tair.db,
+                                        keys = cluster5_div$gene,
+                                        keytype = "TAIR",
+                                        columns = c( "TAIR", "SYMBOL", "GENENAME" ) )
 
 cluster5_results <- cluster5_div %>%
-  left_join(cluster5_annot,
-            by = c("gene" = "TAIR")) %>%
+  left_join(cluster5_annot, by = c("gene" = "TAIR")) %>%
   arrange(desc(abs(deltaFC)))
 
 cluster5_results %>%
@@ -1514,15 +1426,22 @@ cluster5_genes <- cluster5_results$gene
 
 hm_cluster5 <- hm_avg[rownames(hm_avg) %in% cluster5_genes, ]
 
-ann_genotype <- data.frame(
-  genotype = c("COL", "abi5-7", "log2-2"))
+ann_genotype <- data.frame(genotype = c("COL", "abi5-7", "log2-2"))
 
 rownames(ann_genotype) <- c("COL", "abi5-7", "log2-2")
 
-hm_clust5_abivscol <- pheatmap( hm_cluster5, scale = "row", cluster_rows = TRUE, cluster_cols = FALSE, annotation_col = ann_genotype)
+hm_clust5_abivscol <- pheatmap(hm_cluster5, 
+                               scale = "row", 
+                               cluster_rows = TRUE, 
+                               cluster_cols = FALSE, 
+                               angle_col = 45,
+                               annotation_col = ann_genotype)
 
-#ggsave(file.path(graphics_dir, "COL_abi5_divergent_hm5.png"), hm_clust5_abivscol, width = 12, height = 10, dpi = 300)
+#ggsave(file.path(graphics_dir, "divergent_hm5.png"), hm_clust5_abivscol, width = 5, height = 7.5, dpi = 300)
+```
 
+
+```{r}
 # OPPOSITE RESPONSE CLUSTERED ONLY 
 opposite_response %>%
   group_by(cluster) %>%
@@ -1540,6 +1459,296 @@ opposite_response %>%
 #   row.names = FALSE
 # )
 ```
+
+
+```{r}
+#------------------------ DIVERGENT RESPONSES COL & LEU ------------------------#
+# BUILD COMPARISON TABLE 
+COL <- as.data.frame(res_COL_Leu)
+log2 <- as.data.frame(res_log2_Leu)
+
+COL$gene <- rownames(COL)
+log2$gene <- rownames(log2)
+
+compare_all <- merge(COL, log2, by = "gene", suffixes = c("_COL", "_log2"))
+
+compare_all <- compare_all %>%
+  filter(!is.na(log2FoldChange_COL), 
+         !is.na(log2FoldChange_log2) )
+
+# ADD CLUSTER INFO       #
+compare_df <- compare_all %>%
+  left_join(clust_df[, c("gene", "cluster")], by = "gene" )
+
+compare_df <- compare_df %>%
+  mutate(COL_sig = padj_COL < 0.05 &
+           abs(log2FoldChange_COL) > 1.5,
+         log2_sig = padj_log2 < 0.05 &
+           abs(log2FoldChange_log2) > 1.5,
+         
+         deltaFC = log2FoldChange_log2 - log2FoldChange_COL,
+         
+         Divergent = !is.na(cluster) &
+           abs(deltaFC) >= 1.5 &
+           (COL_sig | log2_sig),
+         
+         Opposite = !is.na(cluster) &
+           COL_sig &
+           log2_sig &
+           sign(log2FoldChange_COL) != sign(log2FoldChange_log2))
+
+# CORRELATION
+cor_val <- cor(compare_df$log2FoldChange_COL,
+               compare_df$log2FoldChange_log2,
+               use = "complete.obs")
+cat("Correlation =", round(cor_val, 3), "\n")
+
+# DIVERGENT GENES
+divergent_genes <- compare_df %>%
+  filter(Divergent) %>%
+  arrange(desc(abs(deltaFC)))
+
+# OPPOSITE RESPONSE
+opposite_response <- compare_df %>%
+  filter(Opposite) %>%
+  arrange(desc(abs(deltaFC)))
+cat("Opposite response genes:", nrow(opposite_response), "\n")
+
+# CLUSTER SUMMARY        
+cluster_summary <- divergent_genes %>%
+  group_by(cluster) %>%
+  summarise(n_genes = n(),
+            mean_deltaFC = mean(abs(deltaFC)),
+            median_deltaFC = median(abs(deltaFC)),
+            .groups = "drop") %>%
+  arrange(desc(n_genes))
+
+# SCATTERPLOT
+top_labels <- divergent_genes %>%
+  slice_max(order_by = abs(deltaFC), n = 20)
+
+p_compare <- ggplot() +
+  # all genes
+  geom_point(data = compare_df,
+             aes(x = log2FoldChange_COL,
+                 y = log2FoldChange_log2),
+             color = "grey80",
+             alpha = 0.25,
+             size = 1 ) +
+
+  # clustered divergent genes
+  geom_point(data = divergent_genes,
+             aes(x = log2FoldChange_COL,
+                 y = log2FoldChange_log2,
+                 color = factor(cluster) ),
+             size = 2.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+
+  geom_text_repel(data = top_labels,
+                  aes(x = log2FoldChange_COL,
+                      y = log2FoldChange_log2,
+                      label = gene ),
+                  size = 3) +
+  theme_bw() +
+labs(title = paste0("COL vs abi5 LEU Response (r = ", round(cor_val, 3), ")" ),
+     x = "COL LEU response log2FC",
+     y = "log2 LEU response log2FC",
+     color = "Cluster")
+p_compare
+
+#ggsave(file.path( graphics_dir, "COL_log2_divergent_genes.png"),
+#        p_compare,
+#        width = 8,
+#        height = 6,
+#        dpi = 300)
+```
+```{r}
+#------------------------ GENOTYPE COMPARISON ON LEU ------------------------#
+sig_log2_vs_abi5      <- as.data.frame(res_log2_vs_abi5_LEU)
+sig_log2_vs_abi5$gene <- rownames(sig_log2_vs_abi5)
+sig_log2_vs_abi5      <- sig_log2_vs_abi5 %>% 
+  filter(!is.na(padj), padj < 0.05, abs(log2FoldChange) > 1.5)
+
+cat("Directly different genes (log2 vs abi5 under LEU):", nrow(sig_log2_vs_abi5), "\n")
+
+#------------------------ RESPONSE COMPARISON TABLE ------------------------#
+abi5 <- as.data.frame(res_abi5_Leu) # abi5 LEU vs GM 
+log2 <- as.data.frame(res_log2_Leu) # log2 LEU vs GM
+
+abi5$gene <- rownames(abi5)
+log2$gene <- rownames(log2)
+
+compare_df <- merge(abi5, log2, by = "gene", suffixes = c("_abi5", "_log2"))
+compare_df <- compare_df %>% filter(!is.na(log2FoldChange_abi5),
+                                    !is.na(log2FoldChange_log2))
+#------------------------ CORR ------------------------#
+cor_val <- cor(compare_df$log2FoldChange_abi5, compare_df$log2FoldChange_log2, use = "complete.obs")
+cat("Correlation =", round(cor_val, 3), "\n")
+
+#------------------------ CLUSTERS & DIRECT COMPARISON FLAG ------------------------#
+compare_df <- compare_df %>% left_join(clust_df[ , c("gene", "cluster")], by = "gene" )
+compare_df_clusters <- compare_df %>% filter(!is.na(cluster))
+compare_df <- compare_df %>% mutate(direct_sig = gene %in% sig_log2_vs_abi5$gene)
+
+#------------------------ RESPONSE DIFFERENCE CALCULATIONS ------------------------#
+compare_df <- compare_df %>% mutate(abi5_sig = !is.na(padj_abi5) &
+                                      padj_abi5 < 0.05 &
+                                      abs(log2FoldChange_abi5) > 1.5,
+                                    
+                                    log2_sig = !is.na(padj_log2) &
+                                      padj_log2 < 0.05 &
+                                      abs(log2FoldChange_log2) > 1.5,
+                                    
+                                    deltaFC = log2FoldChange_log2 - log2FoldChange_abi5,
+                                    
+                                    Category = case_when(abi5_sig & log2_sig ~ "Shared",
+                                                         log2_sig & !abi5_sig ~ "log2_specific",
+                                                         abi5_sig & !log2_sig ~ "abi5_specific",
+                                                         TRUE ~ "Not_sig"),
+                                    
+                                    Relation = case_when(abi5_sig & log2_sig & sign(log2FoldChange_abi5) == sign(log2FoldChange_log2) ~ "Same_direction",
+                                                         abi5_sig & log2_sig & sign(log2FoldChange_abi5) != sign(log2FoldChange_log2) ~ "Opposite", 
+                                                         log2_sig & !abi5_sig ~ "log2_unique",
+                                                         abi5_sig & !log2_sig ~ "abi5_unique",
+                                                         TRUE ~ "Other"))
+
+#------------------------ GENE SETS ------------------------#
+shared_genes    <- compare_df %>% filter(Category == "Shared")
+log2_specific   <- compare_df %>% filter(Category == "log2_specific")
+abi5_specific   <- compare_df %>% filter(Category == "abi5_specific")
+divergent_genes <- compare_df %>% filter(abs(deltaFC) >= 1.5 &
+                                           (abi5_sig | log2_sig)) %>%
+  arrange(desc(abs(deltaFC)))
+cat("Divergent genes:", nrow(divergent_genes), "\n")
+
+opposite_response <- compare_df %>% filter(abi5_sig & log2_sig &
+                                             sign(log2FoldChange_abi5) !=
+                                             sign(log2FoldChange_log2)) %>%
+  arrange(desc(abs(deltaFC)))
+cat("Opposite response genes:",
+nrow(opposite_response), "\n")
+
+#------------------------ STRONGEST PHENOTYPE CANDIDATES ------------------------#
+best_candidates <- compare_df %>% filter(direct_sig, abs(deltaFC) >= 1.5) %>%
+  arrange(desc(abs(deltaFC)))
+
+cat("Best candidate genes:", nrow(best_candidates), "\n")
+head(best_candidates[ , c("gene", "cluster", "deltaFC", "log2FoldChange_abi5", "log2FoldChange_log2")], 25)
+
+#------------------------ CLUSTER SUMMARIES ------------------------#
+cluster_summary <- divergent_genes %>% group_by(cluster) %>%
+  summarise(n_genes = n(), mean_deltaFC = mean(abs(deltaFC)), .groups = "drop") %>%
+  arrange(desc(n_genes))
+print(cluster_summary)
+
+log2_cluster_summary <- log2_specific %>% 
+  group_by(cluster) %>% 
+  summarise(n_genes = n(), .groups = "drop") %>%
+  arrange(desc(n_genes))
+print(log2_cluster_summary)
+
+#------------------------ SCATTERPLOT ------------------------#
+top_labels <- divergent_genes %>% slice_max(order_by = abs(deltaFC), n = 20)
+
+p_scatter <- ggplot(compare_df, aes(x = log2FoldChange_abi5,
+                                    y = log2FoldChange_log2)) +
+  geom_point(color = "grey80", alpha = 0.3, size = 1) +
+  geom_point(data = divergent_genes %>% filter(!is.na(cluster)),
+             aes(color = factor(cluster)), size = 2.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  geom_text_repel(data = top_labels %>% filter(!is.na(cluster)), aes(label = gene), size = 3) +
+  theme_bw() +
+  labs(title = paste0("abi5 vs log2 LEU response (r = ", round(cor_val, 3), ")" ), 
+       x = "abi5 log2FC",
+       y = "log2 log2FC",
+       color = "Cluster")
+p_scatter
+#ggsave(file.path( graphics_dir, "COL_log2_divergent_genes.png"),
+#        p_compare,
+#        width = 8,
+#        height = 6,
+#        dpi = 300)
+
+#------------------------ CATEGORY PLOT ------------------------#
+p_category <- ggplot(compare_df, aes(x = log2FoldChange_abi5,
+                                     y = log2FoldChange_log2)) +
+  geom_point(data = subset(compare_df, Category == "Not_sig"),
+             color = "grey85",
+             alpha = 0.2,
+             size = 1) +
+  geom_point(data = subset(compare_df, Category != "Not_sig"),
+             aes(color = Category),
+             alpha = 0.8,
+             size = 1.5) +
+  geom_abline(slope = 1, intercept = 0, linetype = 2) +
+  scale_color_manual(values = c("Shared" = "#1b9e77",
+                                "log2_specific" = "#d95f02",
+                                "abi5_specific" = "#7570b3")) +
+  theme_bw() +
+  labs(title = "Gene response categories",
+       x = "abi5 log2FC",
+       y = "log2 log2FC")
+p_category
+
+#------------------------ DELTAFC DISTRIBUTION ----------------------#
+p_delta <- ggplot(compare_df, aes(x = deltaFC, fill = Category)) +
+  geom_histogram(bins = 100, alpha = 0.7) +
+  theme_bw() + labs(title = "log2 - abi5 response difference",
+                    x = "deltaFC",
+                    y = "Gene count")
+#p_delta
+
+#------------------------ LOG2-SPECIFIC CLUSTERS --------------------#
+p_log2_cluster <- log2_specific %>%
+  filter(!is.na(cluster)) %>%
+  ggplot(aes(x = factor(cluster), fill = factor(cluster))) +
+  geom_bar() +
+  theme_bw() +
+  labs(title = "log2-specific genes by cluster",
+       x = "Cluster",
+       y = "Gene count")
+
+p_log2_cluster
+
+#------------------------ ABI-SPECIFIC CLUSTERS --------------------#
+p_abi5_cluster <- abi5_specific %>%
+  filter(!is.na(cluster)) %>%
+  ggplot(aes(x = factor(cluster), fill = factor(cluster))) +
+  geom_bar() +
+  theme_bw() +
+  labs(title = "abi5-specific genes by cluster",
+       x = "Cluster",
+       y = "Gene count")
+
+p_abi5_cluster
+
+
+#------------------------ DIVERGENCE HEATMAP --------------------#
+heat_genes <- intersect(divergent_genes$gene, rownames(hm_avg))
+
+hm_div <- hm_avg[heat_genes, , drop = FALSE]
+
+ann_col <- data.frame(genotype = colnames(hm_div))
+rownames(ann_col) <- colnames(hm_div)
+
+pheatmap(hm_div, scale = "row", cluster_rows = TRUE, cluster_cols = TRUE, annotation_col = ann_col,fontsize_row = 6)
+#------------------------ EXPORT TABLES --------------------#
+#write_xlsx(list(shared_genes = shared_genes,
+#                log2_specific = log2_specific,
+#                abi5_specific = abi5_specific,
+#                divergent_genes = divergent_genes,
+#                opposite_response = opposite_response,
+#                direct_log2_vs_abi5 = sig_log2_vs_abi5,
+#                best_candidates = best_candidates),
+#           path = file.path(tables_dir, "abi5_log2_comparison.xlsx"))
+
+```
+
+
+
+
+
+
 
 ```{r}
 if (params$session_info) {
