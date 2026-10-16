@@ -63,7 +63,7 @@ cat("Git Commit:", info$Git_Commit, "\n")
 ```{r INSTALL-PACKAGES, message=FALSE}
 #------------------------ LOAD PACKAGES ------------------------#
 cran_packages <- c(
-  "tidyverse",    # dplyr, ggplot2, tidyr, purrr, stringr, readr, forcats
+  "tidyverse",    # dplyr, ggplot2, tidyr, purrr, stringr, readr,forcats
   "ggrepel",      # Add non-overlapping text labels to ggplot2
   "pheatmap",     # Clustered heat maps
   "RColorBrewer", # Color palettes
@@ -91,7 +91,8 @@ bioc_packages <- c(
   "rstudioapi",
   "apeglm",
   "org.At.tair.db",  # Arabidopsis thaliana annotations
-  "clusterProfiler"  # GO/KEGG enrichment analysis and GSEA
+  "clusterProfiler",  # GO/KEGG enrichment analysis and GSEA
+  "AnnotationDbi"
 )
 
 #------------------------ INSTALL CRAN PACKAGES ------------------------#
@@ -105,6 +106,7 @@ if (!requireNamespace("BiocManager", quietly = TRUE)) {
 
 new_bioc <- bioc_packages[!sapply(bioc_packages, requireNamespace, quietly = TRUE)]
 if (length(new_bioc) > 0) BiocManager::install(new_bioc, ask = FALSE)
+
 
 #------------------------ LOAD PACKAGES ------------------------#
 invisible(lapply(cran_packages, library, character.only = TRUE))
@@ -384,7 +386,7 @@ res_log2_vs_COL_LEU <- run_result(contrast = condition_contrast(dds, "log2-2", "
 res_log2_vs_abi5_LEU <- run_result(contrast = condition_contrast(dds, "log2-2", "LEU", "abi5-7", "LEU"))
 ```
 # other CONTRAST TESTING
-```{r BIOLOGICAL TESTING}
+```{r IGNORE THIS - BIOLOGICAL TESTING}
 #------------------------ BASELINE GENOTYPE EFFECTS ------------------------#
 # B. Tests whether mutants differ from COL under control conditions
 res_log2_2_vs_COL_GM <- run_result(label = "04_log2_2_vs_COL_GM", contrast_vector = condition_contrast( dds, "log2-2", "GM", "COL", "GM"))
@@ -511,7 +513,6 @@ get_sig_genes <- function(res,
   }
 prepare_heatmap_matrix <- function(expr_mat, genes) {
   hm <- expr_mat[genes, ]
-  
   hm <- hm[apply(hm, 1, sd) > 0, ]  # Remove invariant genes
   
   hm <- t(scale(t(hm))) # Row z-score
@@ -648,273 +649,55 @@ plot(k_range, silhouette_avg, type = "b", pch = 19)
 # 19. LEU CLUSTERING HEATMAPS
 ```{r Optimal K used is 5}
 #------------------------ RUN KMEANS HEATMAP ------------------------#
-plot_LEU_kmeans_heatmap <- function(res,
-                                    expr_mat,
-                                    annotation_col,
-                                    title,
-                                    padj_cutoff = 0.05,
-                                    lfc_cutoff = 1.5,
-                                    k = 5) {
-  # Significant genes
-  sig <- subset(as.data.frame(res), 
-                !is.na(padj) &
-                  padj < padj_cutoff &
-                  abs(log2FoldChange) > lfc_cutoff)
-
-  if (nrow(sig) < 2) {
-    message("Fewer than 2 significant genes found.")
-    return(NULL)
-  }
-
-  genes <- rownames(sig)
-
-  keep <- annotation_col$treatment == "LEU"  # LEU samples only
-
-  hm <- expr_mat[genes, keep, drop = FALSE]
-  ann <- annotation_col[keep, , drop = FALSE]
-
-  # Force genotype order
-  genotypes <- c("COL", "abi5-7", "log2-2")
-
-  # Average replicates within genotype
-  hm_avg <- do.call(cbind,
-                    lapply(genotypes, function(g) {
-                      idx <- ann$genotype == g
-                      rowMeans(hm[, idx, drop = FALSE],
-                               na.rm = TRUE)
-                      })
-                    )
-
-  colnames(hm_avg) <- genotypes
-  rownames(hm_avg) <- rownames(hm)
-
-  hm_avg <- t(scale(t(hm_avg)))   # Row z-score
-
-  # Remove rows with NA values
-  hm_avg <- hm_avg[apply(hm_avg, 1, function(x) all(is.finite(x))), , drop = FALSE]
-
-  # Keep results table synced with filtered matrix
-  sig2 <- sig[rownames(hm_avg), ]
-
-  # K-means clustering
-  set.seed(123)
-
-  km <- kmeans(hm_avg, centers = k, nstart = 50)
-  cluster_sizes <- table(km$cluster)
-  ord <- order(km$cluster)
-
-  row_ann <- data.frame(Cluster = factor(km$cluster))
-  rownames(row_ann) <- rownames(hm_avg)
-
-  cluster_colors <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e", "#e6ab02", "#a6761d", "#666666")
-
-  ann_colors <- list(Cluster = setNames(cluster_colors[1:k], as.character(1:k)))
-
-  ph <- pheatmap(hm_avg[ord, ],
-                 annotation_row = row_ann[ord, , drop = FALSE],
-                 annotation_colors = ann_colors,
-                 cluster_rows = FALSE,
-                 cluster_cols = FALSE, #already set before
-                 show_rownames = FALSE,
-                 show_colnames = TRUE,
-                 annotation_names_row = FALSE,
-                 gaps_row = cumsum(cluster_sizes)[-length(cluster_sizes)],
-                 angle_col = 45,
-                 color = colorRampPalette(c("navy", "white", "firebrick3"))(100),
-                 main = paste0(title, " (k = ", k, ")"))
-
-  cluster_df <- data.frame(gene = rownames(hm_avg), cluster = km$cluster, log2FC = sig2$log2FoldChange)
-
-  return(list(plot = ph,
-              clusters = cluster_df,
-              kmeans = km,
-              cluster_sizes = cluster_sizes,
-              hm_avg = hm_avg)
-  )
-}
-
 H1_2 <- plot_LEU_kmeans_heatmap(res = res_COL_Leu,
-                              expr_mat = mat,
-                              annotation_col = ann_col,
-                              title = "K-Means clustering of LEU-responsive genes",
-                              k = 5)
+                                expr_mat = mat,
+                                annotation_col = ann_col,
+                                title = "K-Means clustering of LEU-responsive genes",
+                                k = 5)
 clust_df <- H1_2$clusters
-table(clust_df$cluster)
+hm_avg   <- H1_2$hm_avg
+km       <- H1_2$kmeans
 
+table(clust_df$cluster)
 tapply(abs(clust_df$log2FC), clust_df$cluster, mean)
 
 #------------------------ WRITE CLUSTERS ------------------------#
-#write_xlsx(split(clust_df, clust_df$cluster),  path = file.path(tables_dir, "LEU_gene_clusters.xlsx"))
+write_xlsx(split(clust_df, clust_df$cluster),  path = file.path(tables_dir, "LEU_gene_clusters.xlsx"))
 #ggsave(file.path(graphics_dir, "01_2_cluster_leu_heatmap.png"), plot = H1_2$plot$gtable, width = 10, height = 8, dpi = 300)
 ```
 
 
-```{r}
-#------------------------ CLUSTERS ENRICHMENT ------------------------#
-clusters <- sort(unique(clust_df$cluster))
-clust_df$log2FC <- res_COL_Leu[match(clust_df$gene, rownames(res_COL_Leu)),
-                               "log2FoldChange" ]
-
-min_genes <- 5
-
-GO_results <- list()
-GO_sheets <- list()
-
-for(cl in clusters){
-  Clust_genes <- subset(clust_df, cluster == cl)$gene
-
-  cat("Cluster", cl, "Genes:", length(Clust_genes), "\n")
-
-  if(length(Clust_genes) >= min_genes){
-    ego_res <- enrichGO(
-      gene          = Clust_genes,
-      OrgDb         = org.At.tair.db,
-      keyType       = "TAIR",
-      ont           = "BP",
-      pAdjustMethod = "BH",
-      pvalueCutoff  = 0.05,
-      qvalueCutoff  = 0.05)
-
-    # Remove redundant terms
-    if(nrow(as.data.frame(ego_res)) > 0){
-      ego_res <- simplify(ego_res, cutoff = 0.7, by = "p.adjust", select_fun = min)
-
-      # Calculate term similarity matrix
-      ego_res <- pairwise_termsim(ego_res)
-      emapplot(ego_res, showCategory = 30)
-      
-      go_df <- as.data.frame(ego_res)
-      cat("GO terms after simplification:", nrow(go_df), "\n" )
-
-      GO_results[[paste0("Cluster", cl)]] <- ego_res
-      GO_sheets[[paste0("Cluster_", cl)]] <- go_df
-    }
-  }
-}
-
-# Save all clusters in one workbook
-#write_xlsx(GO_sheets, path = file.path(tables_dir, "GO_enrichment_clusters.xlsx"))
-
-#------------------------ GO DOT PLOTS ------------------------#
-go_plot_dir <- file.path(graphics_dir, "GO_dotplots")
-
-for(cl_name in names(GO_results)) {
-  ego_res <- GO_results[[cl_name]]
-  
-  if(nrow(as.data.frame(ego_res)) == 0) {
-    cat(cl_name, ": No significant GO terms\n") 
-    next
-    }
-
-p <- dotplot(ego_res, x = "Count", color = "p.adjust", size = "Count", orderBy = "p.adjust", showCategory = 15, font.size = 14) +
-  ggtitle(paste("GO Enrichment -", cl_name)) +
-  theme_bw() +
-  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
-p
-#ggsave(filename = file.path(graphics_dir, paste0(cl_name, "_GO_dotplot.png")), plot = p, width = 6, height = 6, dpi = 300)
-#cat(cl_name, ": Dotplot saved\n")
-}
-
-gene_clusters <- split(clust_df$gene, clust_df$cluster)
 
 
-# Combine simplified GO results
-
-go_combined <- bind_rows(
-  lapply(names(GO_sheets), function(cl) {
-
-    df <- GO_sheets[[cl]]
-
-    if (nrow(df) == 0) return(NULL)
-
-    # Keep top 10 most significant terms
-    df <- df %>%
-      arrange(p.adjust) %>%
-      slice_head(n = 10)
-
-    df$Cluster <- gsub("Cluster_", "Cluster ", cl)
-    # wrap GO terms
-    df$Description <- str_wrap(df$Description, width = 35)
-    df
-  })
-)
-
-# Plot
-p_go <- ggplot(go_combined,
-               aes(x = Count,
-                   y = reorder_within(Description,
-                                      p.adjust,
-                                      Cluster),
-                   size = Count,
-                   color = p.adjust)
-               ) +
-  geom_point(alpha = 0.9) +
-  facet_wrap(~ Cluster,
-             scales = "free_y",
-             ncol = 2
-             ) +
-  scale_y_reordered() +
-  scale_color_gradient(
-    low = "hotpink",      # most significant
-    high = "#233658",     # least significant
-    name = "Adjusted p-value"
-  ) +
-  labs(title = "GO Biological Process Enrichment by K-means Cluster",
-       x = "Gene Count",
-       y = NULL,
-       size = "Gene Count"
-  ) +
-  theme_bw(base_size = 12) +
-  theme(strip.text = element_text(face = "bold", size = 12),
-    axis.text.y = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(size = 11),
-    legend.title = element_text(face = "bold", size = 10),
-    legend.text = element_text(size = 11),
-    plot.title = element_text(face = "bold", hjust = 0.5, size = 14))
-p_go
-
-#ggsave(file.path(graphics_dir, "GO_clusters_faceted.png"), p_go, width = 12, height = 10, dpi = 300)
-```
-
-
-
-```{r}
+# 20. LINE EXPRESSION CLUSTERS
+```{r EXPRESSION CLUSTERS}
+#------------------------ K MEANS DATA ------------------------#
 hm_avg <- H1_2$hm_avg
-km <- H1_2$kmeans
+km     <- H1_2$kmeans
 
-plot_df <- as.data.frame(hm_avg)
-plot_df$Gene <- rownames(hm_avg)
+plot_df         <- as.data.frame(hm_avg)
+plot_df$Gene    <- rownames(hm_avg)
 plot_df$Cluster <- factor(km$cluster)
 
+#------------------------ LONG FORMAT FOR PLOTS ------------------------#
 plot_long <- plot_df %>%
-  pivot_longer(cols = -c(Gene, Cluster),
-               names_to = "Genotype",
-               values_to = "Expression")
+  pivot_longer(cols = -c(Gene, Cluster), names_to = "Genotype", values_to = "Expression")
 
-# Control genotype order
-plot_long$Genotype <- factor(plot_long$Genotype,
-                           levels = c("COL", "abi5-7", "log2-2"))
+plot_long$Genotype <- factor(plot_long$Genotype, levels = c("COL", "abi5-7", "log2-2")) # Set genotype order
+
 cluster_means <- plot_long %>%
   group_by(Cluster, Genotype) %>%
-  summarize(Mean_Expression = mean(Expression),
-            .groups = "drop")
+  summarize(Mean_Expression = mean(Expression), .groups = "drop")
 
+#------------------------ PLOT ------------------------#
 lineclust <- ggplot() +
-  geom_line(data = plot_long,
-            aes(x = Genotype,
-                y = Expression,
-                group = Gene),
+  geom_line(data = plot_long, aes(x = Genotype, y = Expression, group = Gene),
             alpha = 0.1,
             color = "grey50") +
-  geom_line(data = cluster_means,
-            aes(x = Genotype,
-                y = Mean_Expression,
-                group = 1),
+  geom_line(data = cluster_means, aes(x = Genotype, y = Mean_Expression, group = 1),
             color = "black",
             linewidth = 1.2) +
-  geom_point(data = cluster_means,
-             aes(x = Genotype,
-                 y = Mean_Expression),
+  geom_point(data = cluster_means, aes(x = Genotype, y = Mean_Expression),
              color = "hotpink",
              size = 3) +
   facet_wrap(~Cluster, ncol = 3) +
@@ -924,39 +707,187 @@ lineclust <- ggplot() +
        x = NULL,
        y = "Mean Z-score") +
   theme(legend.position = "none",
-        strip.text = element_text(face = "bold",
-                                  size = 12),
-        axis.text.x = element_text(angle = 45,
-                                   face = "bold",
-                                   hjust = 1),
-        plot.title = element_text(face = "bold",
-                                  hjust = 0.5))
-
+        # text adjustments
+        strip.text = element_text(face = "bold", size = 12),
+        axis.text.x = element_text(angle = 45, face = "bold", hjust = 1),
+        plot.title = element_text(face = "bold", hjust = 0.5))
+lineclust
 #ggsave(file.path(graphics_dir, "GO_clusters_line.png"), lineclust, width = 10, height = 8, dpi = 300)
+```
+
+#GO PLOTS
+```{r}
+#------------------------ GO ENRICHMENT PER CLUSTER ------------------------#
+clusters <- sort(unique(clust_df$cluster))
+
+GO_results <- list()
+GO_sheets  <- list()
+
+for(cl in clusters)
+{
+  genes <- clust_df$gene[clust_df$cluster == cl]
+  cat("Cluster", cl, "Genes:", length(genes), "\n")
+  
+  if(length(genes) < 5)
+    next
+  
+  ego <- enrichGO(gene          = genes,
+                  OrgDb         = org.At.tair.db,
+                  keyType       = "TAIR",
+                  ont           = "BP",
+                  pAdjustMethod = "BH",
+                  pvalueCutoff  = 0.05,
+                  qvalueCutoff  = 0.05)
+  
+  if(nrow(as.data.frame(ego)) == 0)
+    next
+  
+ego <- simplify(ego, cutoff = 0.7, by = "p.adjust", select_fun = min)
+ego <- pairwise_termsim(ego)
+  
+  GO_results[[as.character(cl)]] <- ego
+  GO_sheets[[paste0("Cluster_", cl)]] <- as.data.frame(ego)
+}
+names(GO_sheets)
+nrow(df_go)
+```
+
+
+
+```{r}
+#------------------------ EXPRESSION CLUSTER ------------------------#
+plot_df <- as.data.frame(hm_avg)
+plot_df$Gene <- rownames(hm_avg)
+plot_df$Cluster <- factor(km$cluster, levels = sort(unique(km$cluster)))
+
+plot_long <- plot_df %>%
+  pivot_longer(cols = -c(Gene, Cluster), names_to = "Genotype", values_to = "Expression")
+
+plot_long$Genotype <- factor(plot_long$Genotype, levels = c("COL", "abi5-7", "log2-2"))
+
+cluster_means <- plot_long %>% 
+  group_by(Cluster, Genotype) %>%
+  summarise(Mean_Expression = mean(Expression),
+            .groups = "drop")
 ```
 
 
 ```{r}
-for(cl_name in names(GO_results)) {
+#------------------------ PROFILE + GO FIGURE ------------------------#
+for(cl in levels(plot_df$Cluster))
+{
+  
+#------------------------ PROFILE ------------------------#
+  profile_genes <- plot_long    %>% filter(Cluster == cl)
+  profile_mean <- cluster_means %>% filter(Cluster == cl)
+  
+  p_profile <- ggplot() +
+    geom_line(data = profile_genes, aes(x = Genotype, y = Expression, group = Gene),
+              alpha = 0.10,
+              color = "grey60") +
+    geom_line(data = profile_mean, aes(x = Genotype,
+                                       y = Mean_Expression,
+                                       group = 1),
+              color = "black",
+              linewidth = 1.2) +
+    geom_point(data = profile_mean,
+               aes(x = Genotype, y = Mean_Expression),
+               color = "hotpink",
+               size = 3) +
+    theme_bw() +
+    labs(title = paste("Cluster", cl),
+         subtitle = paste(n_distinct(profile_genes$Gene), "genes"),
+         x = NULL,
+         y = "Mean Z-score") +
+    theme(legend.position = "none",
+          axis.text.x = element_text(angle = 45, face = "bold", hjust = 1),
+          plot.title = element_text(face = "bold", hjust = 0.5),
+          plot.subtitle = element_text(hjust = 0.5))
+  
+#------------------------ GO TERMS ------------------------#
+sheet_name <- paste0("Cluster_", cl)
 
+if(!sheet_name %in% names(GO_sheets))
+  next
+
+df_go <- GO_sheets[[sheet_name]]
+  
+  if(nrow(df_go) == 0)
+    next
+  
+df_go <- df_go %>%
+  arrange(p.adjust) %>%
+  slice_head(n = 10) %>%
+  mutate(Description = str_wrap(Description, width = 35),
+         Description = factor(Description, levels = Description))
+  
+p_go <- ggplot(df_go, aes(x = Count, y = Description)) +
+  geom_point(aes(size = Count, color = p.adjust), alpha = 0.9) +
+  scale_color_gradientn(colours = c("hotpink", "purple", "#233658"), name = "Adjusted p-value") +
+  
+  labs(title = "Top GO Biological Processes",
+       x = "Gene Count",
+       y = NULL) +
+  theme_bw()  +
+  theme(axis.text.y = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(angle = 0, face = "plain"))
+
+#------------------------ COMBINE ------------------------#
+combined_plot <- p_profile / p_go + plot_layout(heights = c(1, 3))
+
+#------------------------ SAVE ------------------------#
+ggsave(file.path(graphics_dir, paste0("Cluster_", cl, "_Profile_GO.png")), combined_plot, width = 8, height = 8, dpi = 300)
+}
+```
+
+
+
+
+
+
+
+
+```{r}
+#------------------------ GO VISUALIZATION ------------------------#
+for(cl_name in names(GO_results)) {
   ego_res <- GO_results[[cl_name]]
 
-  if(nrow(as.data.frame(ego_res)) == 0) next
+  # Skip empty results
+  if(is.null(ego_res) || nrow(as.data.frame(ego_res)) == 0) next
+#------------------------ E-MAP ------------------------#
+  p_emap <- emapplot(ego_res, showCategory = 30)
+  print(p_emap)
 
-  p <- emapplot(ego_res, showCategory = 30)
+  # ggsave(
+  #   file.path(graphics_dir,
+  #             paste0(cl_name, "_emap.png")),
+  #   p_emap,
+  #   width = 8,
+  #   height = 6
+  # )
+#------------------------ DOTPLOT ------------------------#
+  p_dot <- dotplot(ego_res,
+                   x = "Count",
+                   color = "p.adjust",
+                   size = "Count",
+                   showCategory = 15,
+                   orderBy = "p.adjust",
+                   font.size = 12) +
+    scale_size_continuous(name = "Gene Count") +
+    theme_bw() +
+    labs(title = paste("GO Enrichment:", cl_name),
+         x = "Gene Count",
+         y = NULL)
+  print(p_dot)
 
-  ggsave(file.path(graphics_dir, paste0(cl_name,"_emap.png")), width = 8, height = 6)
-  }
-
-p <- dotplot(ego_res, x = "Count", color = "p.adjust", showCategory = 15, orderBy = "p.adjust", font.size = 14) +
-  guides(size = "none") +
-  theme_bw()
-
-p <- dotplot(ego_res, x = "Count", color = "p.adjust", showCategory = 15) +
-  scale_size_continuous(name = "Gene Count")
-
-p <- dotplot(ego_res, x = "Count", color = "p.adjust", size = "Count",
-  showCategory = 15)
+  # ggsave(file.path(graphics_dir,
+  #             paste0(cl_name, "_dotplot.png")),
+  #   p_dot,
+  #   width = 8,
+  #   height = 6,
+  #   dpi = 300
+  # )
+}
 ```
 
 
@@ -1073,7 +1004,7 @@ V1 <- ggVennDiagram(venn_list, label_alpha = 0) +
 #ggsave(file.path(graphics_dir, "COL_vs_abi5_Venn.png"), V1, width = 8, height = 6, dpi = 300)
 ```
 
-
+# ABI LEU VS COL LEU
 ```{r}
 #------------------------ DIVERGENT RESPONSES COL & ABI LEU ------------------------#
 # Compare the LEU response in COL with the LEU response in abi5.
@@ -1092,48 +1023,35 @@ compare_all <- compare_all %>%
          !is.na(log2FoldChange_abi5) )
 
 #------------------------ ADD CLUSTER INFO ------------------------#
-# Adds k-means cluster assignments from previous analyses.
-compare_df <- compare_all %>%
-  left_join( clust_df[ , c("gene", "cluster")], by = "gene" )
+# Add previous k-means cluster assignments
+compare_df <- compare_all %>% left_join( clust_df[ , c("gene", "cluster")], by = "gene" )
 
 #------------------------ RESPONSE CLASSIFICATION ------------------------#
-# Define "responding genes" before identifying divergent responses.
-
-compare_df <- compare_df %>% mutate(COL_sig = padj_COL < 0.05 &
-                                      abs(log2FoldChange_COL) > 1.5,
-                                    abi5_sig = padj_abi5 < 0.05 &
-                                      abs(log2FoldChange_abi5) > 1.5,
-                                    deltaFC = log2FoldChange_abi5 - log2FoldChange_COL,
-         Divergent = !is.na(cluster) &
-           abs(deltaFC) >= 1.5 &
-           (COL_sig | abi5_sig),
-         Opposite = !is.na(cluster) &
-           COL_sig &
-           abi5_sig &
-           sign(log2FoldChange_COL) != sign(log2FoldChange_abi5))
+# Define significant "responding genes" before identifying divergent responses.
+compare_df <- compare_df %>% mutate(COL_sig = padj_COL < 0.05 & abs(log2FoldChange_COL) > 1.5,
+                                     abi5_sig = padj_abi5 < 0.05 & abs(log2FoldChange_abi5) > 1.5,
+                                   
+                                     deltaFC = log2FoldChange_abi5 - log2FoldChange_COL,
+                                    Divergent = !is.na(cluster) & abs(deltaFC) >= 1.5 & 
+                                      (COL_sig | abi5_sig),
+                                    Opposite = !is.na(cluster) & COL_sig & abi5_sig & 
+                                      sign(log2FoldChange_COL) != sign(log2FoldChange_abi5))
 
 #------------------------ CORRELATION ------------------------#
-# Transcriptome-wide similarity of LEU responses
-
 cor_val <- cor(compare_df$log2FoldChange_COL,
                compare_df$log2FoldChange_abi5,
                use = "complete.obs")
 cat("Correlation =", round(cor_val, 3), "\n")
 
 #------------------------ EXTRACT GENE SETS ------------------------#
-divergent_genes <- compare_df %>%
-  filter(Divergent) %>%
-  arrange(desc(abs(deltaFC)))
+divergent_genes <- compare_df %>% filter(Divergent) %>% arrange(desc(abs(deltaFC)))
+opposite_response <- compare_df %>% filter(Opposite) %>% arrange(desc(abs(deltaFC)))
 
-opposite_response <- compare_df %>%
-  filter(Opposite) %>%
-  arrange(desc(abs(deltaFC)))
 cat("Divergent genes:", nrow(divergent_genes), "\n")
 cat("Opposite response genes:", nrow(opposite_response), "\n")
 
 #------------------------ CLUSTER SUMMARY ------------------------#
 # Which expression clusters contribute most to the genotype-specific LEU response?
-
 cluster_summary <- divergent_genes %>%
   group_by(cluster) %>%
   summarise(n_genes = n(),
@@ -1142,8 +1060,7 @@ cluster_summary <- divergent_genes %>%
             .groups = "drop") %>%
   arrange(desc(n_genes))
 #------------------------ SCATTERPLOT ------------------------#
-top_labels <- divergent_genes %>%
-  slice_max(order_by = abs(deltaFC), n = 20)
+top_labels <- divergent_genes %>% slice_max(order_by = abs(deltaFC), n = 20)
 
 p_compare <- ggplot() +
   # all genes
@@ -1265,11 +1182,6 @@ cluster1_results %>% filter(
 # ),
 # row.names = FALSE
 # )
-```
-
-
-```{r ABI LEUCINE DIVERGENT GENES HEATMAP}
-library(AnnotationDbi)
 
 #------------------------ DIVERGENT RESPONSES ABI ------------------------#
 ann_genotype <- data.frame(genotype = c("COL", "abi5-7", "log2-2"))
@@ -1281,11 +1193,8 @@ hm_clust1 <- pheatmap(hm_cluster1,
          cluster_cols = FALSE,
          angle_col = 45,
          annotation_col = ann_genotype)
-ggsave(file.path(graphics_dir, "Divergent_hm1.png"), hm_clust1, width = 5, height = 7.5, dpi = 300)
-```
+#ggsave(file.path(graphics_dir, "Divergent_hm1.png"), hm_clust1, width = 5, height = 7.5, dpi = 300)
 
-
-```{r ABI LEUCINE DIVERGENT GENES HEATMAP}
 opposite_response %>%
   group_by(cluster) %>%
   summarise(n_genes = n(), mean_deltaFC = mean(abs(deltaFC)) ) %>%
@@ -1389,9 +1298,7 @@ ggplot(cluster1_div,
   geom_point() +
   geom_abline(slope = 1, intercept = 0, linetype = 2) +
   theme_bw()
-```
 
-```{r}
 # CLUSTER 5 ONLY         #
 cluster5_div <- divergent_genes %>%
   filter(cluster == 5) %>%
@@ -1438,10 +1345,7 @@ hm_clust5_abivscol <- pheatmap(hm_cluster5,
                                annotation_col = ann_genotype)
 
 #ggsave(file.path(graphics_dir, "divergent_hm5.png"), hm_clust5_abivscol, width = 5, height = 7.5, dpi = 300)
-```
 
-
-```{r}
 # OPPOSITE RESPONSE CLUSTERED ONLY 
 opposite_response %>%
   group_by(cluster) %>%
@@ -1462,7 +1366,7 @@ opposite_response %>%
 
 
 ```{r}
-#------------------------ DIVERGENT RESPONSES COL & LEU ------------------------#
+#------------------------ DIVERGENT RESPONSES LOG2 COL & LEU ------------------------#
 # BUILD COMPARISON TABLE 
 COL <- as.data.frame(res_COL_Leu)
 log2 <- as.data.frame(res_log2_Leu)
@@ -1477,8 +1381,7 @@ compare_all <- compare_all %>%
          !is.na(log2FoldChange_log2) )
 
 # ADD CLUSTER INFO       #
-compare_df <- compare_all %>%
-  left_join(clust_df[, c("gene", "cluster")], by = "gene" )
+compare_df <- compare_all %>% left_join(clust_df[, c("gene", "cluster")], by = "gene" )
 
 compare_df <- compare_df %>%
   mutate(COL_sig = padj_COL < 0.05 &
@@ -1562,27 +1465,29 @@ p_compare
 #        height = 6,
 #        dpi = 300)
 ```
+
 ```{r}
 #------------------------ GENOTYPE COMPARISON ON LEU ------------------------#
 sig_log2_vs_abi5      <- as.data.frame(res_log2_vs_abi5_LEU)
 sig_log2_vs_abi5$gene <- rownames(sig_log2_vs_abi5)
-sig_log2_vs_abi5      <- sig_log2_vs_abi5 %>% 
-  filter(!is.na(padj), padj < 0.05, abs(log2FoldChange) > 1.5)
-
+sig_log2_vs_abi5      <- sig_log2_vs_abi5 %>% filter(!is.na(padj), 
+                                                     padj < 0.05, 
+                                                     abs(log2FoldChange) > 1.5)
 cat("Directly different genes (log2 vs abi5 under LEU):", nrow(sig_log2_vs_abi5), "\n")
 
 #------------------------ RESPONSE COMPARISON TABLE ------------------------#
 abi5 <- as.data.frame(res_abi5_Leu) # abi5 LEU vs GM 
 log2 <- as.data.frame(res_log2_Leu) # log2 LEU vs GM
-
 abi5$gene <- rownames(abi5)
 log2$gene <- rownames(log2)
 
 compare_df <- merge(abi5, log2, by = "gene", suffixes = c("_abi5", "_log2"))
-compare_df <- compare_df %>% filter(!is.na(log2FoldChange_abi5),
+compare_df <- compare_df %>% filter(!is.na(log2FoldChange_abi5), 
                                     !is.na(log2FoldChange_log2))
 #------------------------ CORR ------------------------#
-cor_val <- cor(compare_df$log2FoldChange_abi5, compare_df$log2FoldChange_log2, use = "complete.obs")
+cor_val <- cor(compare_df$log2FoldChange_abi5, 
+               compare_df$log2FoldChange_log2, 
+               use = "complete.obs")
 cat("Correlation =", round(cor_val, 3), "\n")
 
 #------------------------ CLUSTERS & DIRECT COMPARISON FLAG ------------------------#
@@ -1591,23 +1496,20 @@ compare_df_clusters <- compare_df %>% filter(!is.na(cluster))
 compare_df <- compare_df %>% mutate(direct_sig = gene %in% sig_log2_vs_abi5$gene)
 
 #------------------------ RESPONSE DIFFERENCE CALCULATIONS ------------------------#
-compare_df <- compare_df %>% mutate(abi5_sig = !is.na(padj_abi5) &
-                                      padj_abi5 < 0.05 &
-                                      abs(log2FoldChange_abi5) > 1.5,
-                                    
+compare_df <- compare_df %>% mutate(abi5_sig = !is.na(padj_abi5) & 
+                                      padj_abi5 < 0.05 & abs(log2FoldChange_abi5) > 1.5,
                                     log2_sig = !is.na(padj_log2) &
-                                      padj_log2 < 0.05 &
-                                      abs(log2FoldChange_log2) > 1.5,
+                                      padj_log2 < 0.05 & abs(log2FoldChange_log2) > 1.5,
                                     
                                     deltaFC = log2FoldChange_log2 - log2FoldChange_abi5,
-                                    
                                     Category = case_when(abi5_sig & log2_sig ~ "Shared",
                                                          log2_sig & !abi5_sig ~ "log2_specific",
                                                          abi5_sig & !log2_sig ~ "abi5_specific",
                                                          TRUE ~ "Not_sig"),
-                                    
-                                    Relation = case_when(abi5_sig & log2_sig & sign(log2FoldChange_abi5) == sign(log2FoldChange_log2) ~ "Same_direction",
-                                                         abi5_sig & log2_sig & sign(log2FoldChange_abi5) != sign(log2FoldChange_log2) ~ "Opposite", 
+                                    Relation = case_when(abi5_sig & log2_sig & 
+                                                           sign(log2FoldChange_abi5) == sign(log2FoldChange_log2) ~ "Same_direction",
+                                                         abi5_sig & log2_sig & 
+                                                           sign(log2FoldChange_abi5) != sign(log2FoldChange_log2) ~ "Opposite", 
                                                          log2_sig & !abi5_sig ~ "log2_unique",
                                                          abi5_sig & !log2_sig ~ "abi5_unique",
                                                          TRUE ~ "Other"))
@@ -1622,18 +1524,14 @@ divergent_genes <- compare_df %>% filter(abs(deltaFC) >= 1.5 &
 cat("Divergent genes:", nrow(divergent_genes), "\n")
 
 opposite_response <- compare_df %>% filter(abi5_sig & log2_sig &
-                                             sign(log2FoldChange_abi5) !=
-                                             sign(log2FoldChange_log2)) %>%
+                                             sign(log2FoldChange_abi5) != sign(log2FoldChange_log2)) %>%
   arrange(desc(abs(deltaFC)))
-cat("Opposite response genes:",
-nrow(opposite_response), "\n")
+cat("Opposite response genes:", nrow(opposite_response), "\n")
 
 #------------------------ STRONGEST PHENOTYPE CANDIDATES ------------------------#
 best_candidates <- compare_df %>% filter(direct_sig, abs(deltaFC) >= 1.5) %>%
   arrange(desc(abs(deltaFC)))
-
 cat("Best candidate genes:", nrow(best_candidates), "\n")
-head(best_candidates[ , c("gene", "cluster", "deltaFC", "log2FoldChange_abi5", "log2FoldChange_log2")], 25)
 
 #------------------------ CLUSTER SUMMARIES ------------------------#
 cluster_summary <- divergent_genes %>% group_by(cluster) %>%
@@ -1646,6 +1544,12 @@ log2_cluster_summary <- log2_specific %>%
   summarise(n_genes = n(), .groups = "drop") %>%
   arrange(desc(n_genes))
 print(log2_cluster_summary)
+
+abi5_cluster_summary <- abi5_specific %>% 
+  group_by(cluster) %>% 
+  summarise(n_genes = n(), .groups = "drop") %>%
+  arrange(desc(n_genes))
+print(abi5_cluster_summary)
 
 #------------------------ SCATTERPLOT ------------------------#
 top_labels <- divergent_genes %>% slice_max(order_by = abs(deltaFC), n = 20)
@@ -1673,13 +1577,10 @@ p_scatter
 p_category <- ggplot(compare_df, aes(x = log2FoldChange_abi5,
                                      y = log2FoldChange_log2)) +
   geom_point(data = subset(compare_df, Category == "Not_sig"),
-             color = "grey85",
-             alpha = 0.2,
-             size = 1) +
+             color = "grey85", alpha = 0.2, size = 1) +
   geom_point(data = subset(compare_df, Category != "Not_sig"),
              aes(color = Category),
-             alpha = 0.8,
-             size = 1.5) +
+             alpha = 0.8, size = 1.5) +
   geom_abline(slope = 1, intercept = 0, linetype = 2) +
   scale_color_manual(values = c("Shared" = "#1b9e77",
                                 "log2_specific" = "#d95f02",
@@ -1707,7 +1608,6 @@ p_log2_cluster <- log2_specific %>%
   labs(title = "log2-specific genes by cluster",
        x = "Cluster",
        y = "Gene count")
-
 p_log2_cluster
 
 #------------------------ ABI-SPECIFIC CLUSTERS --------------------#
@@ -1719,9 +1619,7 @@ p_abi5_cluster <- abi5_specific %>%
   labs(title = "abi5-specific genes by cluster",
        x = "Cluster",
        y = "Gene count")
-
 p_abi5_cluster
-
 
 #------------------------ DIVERGENCE HEATMAP --------------------#
 heat_genes <- intersect(divergent_genes$gene, rownames(hm_avg))
@@ -1743,8 +1641,6 @@ pheatmap(hm_div, scale = "row", cluster_rows = TRUE, cluster_cols = TRUE, annota
 #           path = file.path(tables_dir, "abi5_log2_comparison.xlsx"))
 
 ```
-
-
 
 
 
